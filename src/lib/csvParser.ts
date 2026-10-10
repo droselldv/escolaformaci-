@@ -1,0 +1,293 @@
+import { RawLumaGuest, ProcessedGuest, EventAnalysis, TableGroup, DishTotal } from '../types';
+
+/**
+ * Robust CSV parser that handles quotes, escaped quotes, and multiline values.
+ */
+export function parseCSVLines(text: string): string[][] {
+  const lines: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+  let i = 0;
+
+  // Clean BOM if present
+  const cleaned = text.replace(/^\uFEFF/, '').trim();
+
+  while (i < cleaned.length) {
+    const char = cleaned[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (i + 1 < cleaned.length && cleaned[i + 1] === '"') {
+          // Escaped quote
+          currentField += '"';
+          i += 2;
+          continue;
+        } else {
+          // End of quotes
+          inQuotes = false;
+          i++;
+          continue;
+        }
+      } else {
+        currentField += char;
+        i++;
+        continue;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+        i++;
+        continue;
+      } else if (char === ',') {
+        currentRow.push(currentField.trim());
+        currentField = '';
+        i++;
+        continue;
+      } else if (char === '\r') {
+        if (i + 1 < cleaned.length && cleaned[i + 1] === '\n') {
+          i++;
+        }
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f.length > 0)) {
+          lines.push(currentRow);
+        }
+        currentRow = [];
+        currentField = '';
+        i++;
+        continue;
+      } else if (char === '\n') {
+        currentRow.push(currentField.trim());
+        if (currentRow.some(f => f.length > 0)) {
+          lines.push(currentRow);
+        }
+        currentRow = [];
+        currentField = '';
+        i++;
+        continue;
+      } else {
+        currentField += char;
+        i++;
+        continue;
+      }
+    }
+  }
+
+  // Push remainder
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some(f => f.length > 0)) {
+      lines.push(currentRow);
+    }
+  }
+
+  return lines;
+}
+
+export function parseLumaCSV(csvText: string, sortMode: 'chronological' | 'original' = 'chronological'): RawLumaGuest[] {
+  const rows = parseCSVLines(csvText);
+  if (rows.length === 0) return [];
+
+  const headers = rows[0].map(h => h.trim().toLowerCase());
+  
+  // Find column indices
+  const getIndex = (names: string[]): number => {
+    for (const name of names) {
+      const idx = headers.findIndex(h => h === name.toLowerCase() || h.includes(name.toLowerCase()));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  const idIdx = getIndex(['guest_id', 'id']);
+  const nameIdx = getIndex(['name', 'full_name', 'nom']);
+  const firstNameIdx = getIndex(['first_name', 'nom']);
+  const lastNameIdx = getIndex(['last_name', 'cognoms', 'cognom']);
+  const emailIdx = getIndex(['email', 'correu']);
+  const phoneIdx = getIndex(['phone_number', 'phone', 'telefon', 'telèfon']);
+  const dateIdx = getIndex(['created_at', 'registered_at', 'data']);
+  const statusIdx = getIndex(['approval_status', 'status', 'estat']);
+  const ticketIdx = getIndex(['ticket_name', 'ticket', 'tipus']);
+  const comarcaIdx = getIndex(['comarca']);
+  const municipiIdx = getIndex(['municipi', 'ciutat', 'poblacio']);
+  const dishIdx = getIndex([
+    'dinar - segon plat a escollir (si escau)',
+    'dinar - segon plat',
+    'segon plat',
+    'dish',
+    'plat'
+  ]);
+  const amountIdx = getIndex(['amount', 'import']);
+  const currencyIdx = getIndex(['currency', 'moneda']);
+
+  const rawGuests: RawLumaGuest[] = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || row.length === 0) continue;
+
+    const guestId = (idIdx >= 0 ? row[idIdx] : '') || `guest-${r}`;
+    const fullName = (nameIdx >= 0 ? row[nameIdx] : '') || '';
+    const firstName = (firstNameIdx >= 0 ? row[firstNameIdx] : '') || '';
+    const lastName = (lastNameIdx >= 0 ? row[lastNameIdx] : '') || '';
+    const email = (emailIdx >= 0 ? row[emailIdx] : '') || '';
+    const phone = (phoneIdx >= 0 ? row[phoneIdx] : '') || '';
+    const createdAt = (dateIdx >= 0 ? row[dateIdx] : '') || new Date().toISOString();
+    const status = (statusIdx >= 0 ? row[statusIdx] : '') || 'approved';
+    const ticket = (ticketIdx >= 0 ? row[ticketIdx] : '') || '';
+    const comarca = (comarcaIdx >= 0 ? row[comarcaIdx] : '') || '';
+    const municipi = (municipiIdx >= 0 ? row[municipiIdx] : '') || '';
+    const dishRaw = (dishIdx >= 0 ? row[dishIdx] : '') || '';
+    const amount = (amountIdx >= 0 ? row[amountIdx] : '') || '';
+    const currency = (currencyIdx >= 0 ? row[currencyIdx] : '') || 'eur';
+
+    // Discard empty or corrupt rows
+    if (!fullName && !email && !phone) continue;
+
+    rawGuests.push({
+      guest_id: guestId,
+      name: fullName || `${firstName} ${lastName}`.trim(),
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone_number: phone,
+      created_at: createdAt,
+      approval_status: status,
+      ticket_name: ticket,
+      comarca,
+      municipi,
+      dish_raw: dishRaw,
+      amount,
+      currency,
+    });
+  }
+
+  return rawGuests;
+}
+
+export function determineLunchStatus(rawDish: string, ticketName: string): { stays: boolean; cleanDish: string } {
+  const d = (rawDish || '').trim();
+  const lowerDish = d.toLowerCase();
+  const lowerTicket = (ticketName || '').toLowerCase();
+
+  // Explicit decline
+  if (lowerDish.includes('no em quedo') || lowerDish.includes('no dinar') || lowerDish === 'no') {
+    return { stays: false, cleanDish: 'No em quedo al dinar' };
+  }
+
+  // Explicit dishes
+  if (lowerDish.includes('carn') || lowerDish.includes('llom')) {
+    return { stays: true, cleanDish: 'Carn - Cap de llom' };
+  }
+  if (lowerDish.includes('peix') || lowerDish.includes('orada')) {
+    return { stays: true, cleanDish: 'Peix - Orada' };
+  }
+
+  // Any other non-empty dish choice that isn't "no..."
+  if (d.length > 0 && !lowerDish.includes('no')) {
+    return { stays: true, cleanDish: d };
+  }
+
+  // If ticket explicitly says "dinar"
+  if (lowerTicket.includes('dinar')) {
+    return { stays: true, cleanDish: d || 'Sense plat especificat' };
+  }
+
+  // Default: doesn't stay
+  return { stays: false, cleanDish: 'No em quedo al dinar' };
+}
+
+export function processGuests(
+  rawGuests: RawLumaGuest[],
+  sortMode: 'chronological' | 'original' = 'chronological',
+  tableSize = 10
+): EventAnalysis {
+  // Clone array
+  let sorted = [...rawGuests];
+
+  if (sortMode === 'chronological') {
+    // Sort oldest created_at first -> chronological order of registration
+    sorted.sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      if (isNaN(timeA) || isNaN(timeB)) return 0;
+      return timeA - timeB; // Earliest first
+    });
+  }
+
+  const processedAll: ProcessedGuest[] = [];
+  const lunchGuests: ProcessedGuest[] = [];
+  const noLunchGuests: ProcessedGuest[] = [];
+
+  // Classify guests
+  sorted.forEach((raw, idx) => {
+    const { stays, cleanDish } = determineLunchStatus(raw.dish_raw, raw.ticket_name);
+    const item: ProcessedGuest = {
+      ...raw,
+      staysForLunch: stays,
+      cleanDish,
+      registrationOrder: idx + 1,
+    };
+    processedAll.push(item);
+    if (stays) {
+      lunchGuests.push(item);
+    } else {
+      noLunchGuests.push(item);
+    }
+  });
+
+  // Assign tables of 10 for lunch guests
+  const tables: TableGroup[] = [];
+  const totalLunch = lunchGuests.length;
+  const numTables = Math.ceil(totalLunch / tableSize) || 0;
+
+  for (let t = 0; t < numTables; t++) {
+    const tableNum = t + 1;
+    const startIdx = t * tableSize;
+    const endIdx = Math.min(startIdx + tableSize, totalLunch);
+    const tableMembers = lunchGuests.slice(startIdx, endIdx);
+
+    const dishCounts: Record<string, number> = {};
+
+    tableMembers.forEach((g, seatIdx) => {
+      g.tableNumber = tableNum;
+      g.seatNumber = seatIdx + 1;
+      dishCounts[g.cleanDish] = (dishCounts[g.cleanDish] || 0) + 1;
+    });
+
+    tables.push({
+      tableNumber: tableNum,
+      capacity: tableSize,
+      guests: tableMembers,
+      dishCounts,
+    });
+  }
+
+  // Calculate overall dish totals
+  const dishCountsMap: Record<string, number> = {};
+  lunchGuests.forEach(g => {
+    dishCountsMap[g.cleanDish] = (dishCountsMap[g.cleanDish] || 0) + 1;
+  });
+
+  const dishTotals: DishTotal[] = Object.entries(dishCountsMap).map(([dish, count]) => ({
+    dish,
+    count,
+    percentage: totalLunch > 0 ? Math.round((count / totalLunch) * 1000) / 10 : 0,
+  }));
+
+  // Sort dishes by count descending
+  dishTotals.sort((a, b) => b.count - a.count);
+
+  return {
+    allGuests: processedAll,
+    lunchGuests,
+    noLunchGuests,
+    tables,
+    dishTotals,
+    totalRegistered: rawGuests.length,
+    totalLunch: lunchGuests.length,
+    totalNoLunch: noLunchGuests.length,
+    totalTables: tables.length,
+    updatedAt: new Date().toISOString(),
+  };
+}

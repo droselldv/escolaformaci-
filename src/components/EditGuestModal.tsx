@@ -1,0 +1,154 @@
+import React, { useState } from 'react';
+import { ProcessedGuest } from '../types';
+import { X, Check, MapPin, Mail, Phone, Calendar } from 'lucide-react';
+
+interface EditGuestModalProps {
+  guest: ProcessedGuest | null;
+  onClose: () => void;
+  onSave: (guestId: string, staysForLunch: boolean, dish: string) => void;
+}
+
+export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, onSave }) => {
+  if (!guest) return null;
+
+  const [stays, setStays] = useState(guest.staysForLunch);
+  const [dish, setDish] = useState(guest.cleanDish);
+
+  const handleSave = () => {
+    onSave(guest.guest_id, stays, dish);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+      <div className="bg-white rounded-lg max-w-md w-full shadow-lg border border-slate-200 overflow-hidden text-xs">
+        {/* Header */}
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-900 text-sm">{guest.name}</h3>
+            <p className="text-[11px] text-slate-500 font-mono">{guest.guest_id}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200/50 transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-5 space-y-4">
+          <div className="space-y-1.5 p-3 bg-slate-50 rounded border border-slate-200 text-slate-600">
+            <div className="flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span>{guest.email || 'Sense email'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone className="w-3.5 h-3.5 text-slate-400" />
+              <span>{guest.phone_number || 'Sense telèfon'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                {guest.municipi ? `${guest.municipi} (${guest.comarca})` : guest.comarca || 'Sense municipi'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                Inscrit: {guest.created_at ? new Date(guest.created_at).toLocaleString('ca-ES') : '-'}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="font-medium text-slate-800 block mb-1">
+              Assistència al Dinar
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStays(true);
+                  if (dish === 'No em quedo al dinar') setDish('Carn - Cap de llom');
+                }}
+                className={`py-2 px-3 rounded border font-medium cursor-pointer transition ${
+                  stays
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                Es queda al dinar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStays(false);
+                  setDish('No em quedo al dinar');
+                }}
+                className={`py-2 px-3 rounded border font-medium cursor-pointer transition ${
+                  !stays
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                Sense dinar
+              </button>
+            </div>
+          </div>
+
+          {stays && (
+            <div>
+              <label className="font-medium text-slate-800 block mb-1">
+                Segon Plat Escollit
+              </label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2.5 p-2 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dish"
+                    value="Carn - Cap de llom"
+                    checked={dish === 'Carn - Cap de llom'}
+                    onChange={() => setDish('Carn - Cap de llom')}
+                    className="text-slate-900 focus:ring-slate-500"
+                  />
+                  <span className="font-medium text-slate-900">Carn - Cap de llom</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-2 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dish"
+                    value="Peix - Orada"
+                    checked={dish === 'Peix - Orada'}
+                    onChange={() => setDish('Peix - Orada')}
+                    className="text-slate-900 focus:ring-slate-500"
+                  />
+                  <span className="font-medium text-slate-900">Peix - Orada</span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 rounded transition cursor-pointer"
+          >
+            Cancel·lar
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-3.5 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <Check className="w-3.5 h-3.5" />
+            <span>Desar Canvis</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

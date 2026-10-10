@@ -1,0 +1,6 @@
+{
+  "name": "Luma Event Dinars & Taules Manager",
+  "description": "Gestor d'assistents d'esdeveniments Luma amb assignació automàtica de taules de 10 persones, control de plats de dinar i sincronització directa a Google Sheets i Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/* Official Google Sign-In Material Button styles */
+.gsi-material-button {
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  -webkit-appearance: none;
+  background-color: WHITE;
+  background-image: none;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  box-sizing: border-box;
+  color: #3c4043;
+  cursor: pointer;
+  font-family: 'Google Sans', Roboto, arial, sans-serif;
+  font-size: 14px;
+  height: 40px;
+  letter-spacing: 0.25px;
+  outline: none;
+  overflow: hidden;
+  padding: 0 16px;
+  position: relative;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: auto;
+  transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gsi-material-button:hover {
+  background-color: #f8fafd;
+  border-color: #dadce0;
+  box-shadow: 0 1px 3px rgba(60,64,67,0.15);
+}
+
+.gsi-material-button:active {
+  background-color: #eeeeee;
+  box-shadow: none;
+}
+
+.gsi-material-button-content-wrapper {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.gsi-material-button-icon {
+  height: 20px;
+  margin-right: 10px;
+  min-width: 20px;
+  width: 20px;
+}
+
+.gsi-material-button-contents {
+  font-family: 'Google Sans', Roboto, arial, sans-serif;
+  font-weight: 500;
+  color: #3c4043;
+}
