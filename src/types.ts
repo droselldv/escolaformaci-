@@ -74,13 +74,13 @@ export interface ColumnDefinition {
 
 export const ALL_COLUMNS: ColumnDefinition[] = [
   { id: 'table', label: 'Taula assignada', shortLabel: 'Taula', category: 'taula', defaultEnabled: true },
-  { id: 'seat', label: 'Seient (1 a 10)', shortLabel: 'Seient', category: 'taula', defaultEnabled: true },
+  { id: 'seat', label: 'Seient (1 a 10)', shortLabel: 'Seient', category: 'taula', defaultEnabled: false },
   { id: 'name', label: 'Nom complet', shortLabel: 'Nom complet', category: 'personal', defaultEnabled: true },
   { id: 'first_name', label: 'Nom', shortLabel: 'Nom', category: 'personal', defaultEnabled: false },
   { id: 'last_name', label: 'Cognoms', shortLabel: 'Cognoms', category: 'personal', defaultEnabled: false },
-  { id: 'dish', label: 'Segon Plat demanat', shortLabel: 'Plat', category: 'taula', defaultEnabled: true },
-  { id: 'phone', label: 'Telèfon', shortLabel: 'Telèfon', category: 'contacte', defaultEnabled: true },
-  { id: 'email', label: 'Correu electrònic', shortLabel: 'Email', category: 'contacte', defaultEnabled: true },
+  { id: 'dish', label: 'Segon Plat demanat', shortLabel: 'Plat', category: 'taula', defaultEnabled: false },
+  { id: 'phone', label: 'Telèfon', shortLabel: 'Telèfon', category: 'contacte', defaultEnabled: false },
+  { id: 'email', label: 'Correu electrònic', shortLabel: 'Email', category: 'contacte', defaultEnabled: false },
   { id: 'municipi', label: 'Municipi', shortLabel: 'Municipi', category: 'contacte', defaultEnabled: true },
   { id: 'comarca', label: 'Comarca', shortLabel: 'Comarca', category: 'contacte', defaultEnabled: true },
   { id: 'created_at', label: 'Data inscripció', shortLabel: 'Data', category: 'altres', defaultEnabled: false },

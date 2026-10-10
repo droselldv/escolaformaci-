@@ -3,10 +3,10 @@ import { EventAnalysis, ProcessedGuest, CustomExportOptions, AvailableColumnId, 
 import { sortGuests } from './sorting';
 
 export const DEFAULT_EXPORT_OPTIONS: CustomExportOptions = {
-  columns: ['table', 'seat', 'name', 'dish', 'phone', 'email', 'municipi', 'comarca'],
-  sortBy: 'table_seat',
+  columns: ['table', 'name', 'municipi', 'comarca'],
+  sortBy: 'alpha_lastname',
   sortDirection: 'asc',
-  groupByTables: true,
+  groupByTables: false,
   includeNoLunchSheet: true,
   includeKitchenSummarySheet: true,
 };

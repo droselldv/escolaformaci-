@@ -66,7 +66,7 @@ export default function App() {
   // 3. Custom Export & Display Options State
   const [exportOptions, setExportOptions] = useState<CustomExportOptions>(() => {
     try {
-      const saved = localStorage.getItem('luma_export_options');
+      const saved = localStorage.getItem('luma_export_options_v3');
       return saved ? JSON.parse(saved) : DEFAULT_EXPORT_OPTIONS;
     } catch {
       return DEFAULT_EXPORT_OPTIONS;
@@ -151,7 +151,7 @@ export default function App() {
   }, [manualOverrides]);
 
   useEffect(() => {
-    localStorage.setItem('luma_export_options', JSON.stringify(exportOptions));
+    localStorage.setItem('luma_export_options_v3', JSON.stringify(exportOptions));
   }, [exportOptions]);
 
   // Auth listener
