@@ -144,11 +144,31 @@ export function parseLumaCSV(csvText: string, sortMode: 'chronological' | 'origi
     // Discard empty or corrupt rows
     if (!fullName && !email && !phone) continue;
 
+    let finalFirstName = firstName.trim();
+    let finalLastName = lastName.trim();
+    const finalFullName = (fullName || `${firstName} ${lastName}`).trim();
+
+    if (!finalFirstName && !finalLastName && finalFullName) {
+      if (finalFullName.includes(',')) {
+        const commaParts = finalFullName.split(',');
+        finalLastName = commaParts[0].trim();
+        finalFirstName = commaParts.slice(1).join(',').trim();
+      } else {
+        const spaceParts = finalFullName.split(/\s+/);
+        if (spaceParts.length > 1) {
+          finalFirstName = spaceParts[0];
+          finalLastName = spaceParts.slice(1).join(' ');
+        } else {
+          finalFirstName = spaceParts[0];
+        }
+      }
+    }
+
     rawGuests.push({
       guest_id: guestId,
-      name: fullName || `${firstName} ${lastName}`.trim(),
-      first_name: firstName,
-      last_name: lastName,
+      name: finalFullName,
+      first_name: finalFirstName,
+      last_name: finalLastName,
       email,
       phone_number: phone,
       created_at: createdAt,

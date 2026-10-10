@@ -7,7 +7,7 @@ import {
   AvailableColumnId,
   SortKey,
 } from '../types';
-import { sortGuests } from '../lib/sorting';
+import { sortGuests, formatFullNameSurnamesFirst } from '../lib/sorting';
 import {
   Search,
   SlidersHorizontal,
@@ -26,6 +26,8 @@ interface FullTableViewProps {
 
 function getColumnValue(g: ProcessedGuest, colId: AvailableColumnId): React.ReactNode {
   switch (colId) {
+    case 'name':
+      return <span className="font-semibold text-slate-900">{formatFullNameSurnamesFirst(g)}</span>;
     case 'table':
       return (
         <span className="font-medium text-slate-800 whitespace-nowrap">
@@ -34,8 +36,6 @@ function getColumnValue(g: ProcessedGuest, colId: AvailableColumnId): React.Reac
       );
     case 'seat':
       return <span className="font-mono text-slate-500">{g.seatNumber ?? '-'}</span>;
-    case 'name':
-      return <span className="font-semibold text-slate-900">{g.name}</span>;
     case 'first_name':
       return <span>{g.first_name || g.name.split(' ')[0]}</span>;
     case 'last_name':
@@ -150,7 +150,9 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
     return Array.from(map.entries()).sort(([a], [b]) => a - b);
   }, [processedLunch, options.groupByTables]);
 
-  const visibleCols = options.columns;
+  const visibleCols: AvailableColumnId[] = options.columns.includes('name')
+    ? (['name', ...options.columns.filter(c => c !== 'name')] as AvailableColumnId[])
+    : options.columns;
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col text-xs">

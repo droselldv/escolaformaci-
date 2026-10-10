@@ -1,9 +1,9 @@
 import * as XLSX from 'xlsx';
 import { EventAnalysis, ProcessedGuest, CustomExportOptions, AvailableColumnId, ALL_COLUMNS } from '../types';
-import { sortGuests } from './sorting';
+import { sortGuests, formatFullNameSurnamesFirst } from './sorting';
 
 export const DEFAULT_EXPORT_OPTIONS: CustomExportOptions = {
-  columns: ['table', 'name', 'municipi', 'comarca'],
+  columns: ['name', 'table', 'municipi', 'comarca'],
   sortBy: 'alpha_lastname',
   sortDirection: 'asc',
   groupByTables: false,
@@ -18,7 +18,7 @@ function getGuestColumnValue(g: ProcessedGuest, col: AvailableColumnId): string 
     case 'seat':
       return g.seatNumber ?? '-';
     case 'name':
-      return g.name;
+      return formatFullNameSurnamesFirst(g);
     case 'first_name':
       return g.first_name || g.name.split(' ')[0] || '';
     case 'last_name':
@@ -50,8 +50,11 @@ export function generateExcelWorkbook(
 ): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
 
-  // Column headers based on user's selection
-  const selectedCols = options.columns.length > 0 ? options.columns : DEFAULT_EXPORT_OPTIONS.columns;
+  // Column headers based on user's selection (ensuring 'name' is first if included)
+  const rawCols = options.columns.length > 0 ? options.columns : DEFAULT_EXPORT_OPTIONS.columns;
+  const selectedCols: AvailableColumnId[] = rawCols.includes('name')
+    ? (['name', ...rawCols.filter(c => c !== 'name')] as AvailableColumnId[])
+    : rawCols;
   const colDefMap = new Map(ALL_COLUMNS.map(c => [c.id, c]));
 
   // 1. FULL 1: Assistents Dinar
@@ -121,7 +124,7 @@ export function generateExcelWorkbook(
   // 2. FULL 2: Sense Dinar (opcional segons opcions)
   if (options.includeNoLunchSheet) {
     const sortedNoLunch = sortGuests(analysis.noLunchGuests, options.sortBy === 'table_seat' ? 'alpha_name' : options.sortBy, options.sortDirection);
-    const noLunchCols = selectedCols.filter(c => c !== 'table' && c !== 'seat');
+    const noLunchCols: AvailableColumnId[] = selectedCols.filter(c => c !== 'table' && c !== 'seat');
     const sheet2Headers = ['Núm', ...noLunchCols.map(id => colDefMap.get(id)?.label || id)];
     const sheet2Data: (string | number)[][] = [sheet2Headers];
 

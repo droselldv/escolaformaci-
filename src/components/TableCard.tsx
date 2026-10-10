@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TableGroup, ProcessedGuest } from '../types';
+import { formatFullNameSurnamesFirst } from '../lib/sorting';
 import { Copy, Check } from 'lucide-react';
 
 interface TableCardProps {
@@ -17,7 +18,7 @@ export const TableCard: React.FC<TableCardProps> = ({ table, onEditGuest }) => {
     const text = [
       `Taula ${table.tableNumber} (${table.guests.length}/10 comensals) - Carn: ${carnCount}, Peix: ${peixCount}`,
       ...table.guests.map(
-        g => `${g.seatNumber}. ${g.name} - ${g.cleanDish} (${g.municipi || g.comarca || '-'}, Tel: ${g.phone_number || '-'})`
+        g => `${g.seatNumber}. ${formatFullNameSurnamesFirst(g)} - ${g.cleanDish} (${g.municipi || g.comarca || '-'}, Tel: ${g.phone_number || '-'})`
       ),
     ].join('\n');
 
@@ -69,7 +70,7 @@ export const TableCard: React.FC<TableCardProps> = ({ table, onEditGuest }) => {
               </span>
               <div className="min-w-0">
                 <span className="font-medium text-slate-900 text-xs truncate block group-hover:text-blue-600">
-                  {guest.name}
+                  {formatFullNameSurnamesFirst(guest)}
                 </span>
                 <span className="text-[10px] text-slate-400 truncate block">
                   {guest.municipi ? `${guest.municipi} (${guest.comarca})` : guest.comarca || ''}

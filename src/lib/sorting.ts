@@ -1,5 +1,50 @@
 import { ProcessedGuest, SortKey } from '../types';
 
+/**
+ * Formats guest name starting with Surnames, then First name: "Cognoms, Nom".
+ * Example: "Abad Gimeno, Ramon" or "Campanyà, Francesc".
+ */
+export function formatFullNameSurnamesFirst(g: {
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+}): string {
+  const ln = (g.last_name || '').trim();
+  const fn = (g.first_name || '').trim();
+
+  if (ln && fn) {
+    return `${ln}, ${fn}`;
+  }
+  if (ln && !fn) {
+    return ln;
+  }
+  const raw = (g.name || '').trim();
+  if (!raw) return '-';
+
+  if (raw.includes(',')) {
+    return raw;
+  }
+
+  // If first_name is known and raw starts with it, extract remainder as surname
+  if (fn && raw.toLowerCase().startsWith(fn.toLowerCase())) {
+    const remainder = raw.slice(fn.length).trim();
+    if (remainder) {
+      return `${remainder}, ${fn}`;
+    }
+    return fn;
+  }
+
+  // Split by whitespace: first word as first name, rest as surnames
+  const parts = raw.split(/\s+/);
+  if (parts.length > 1) {
+    const firstName = parts[0];
+    const lastName = parts.slice(1).join(' ');
+    return `${lastName}, ${firstName}`;
+  }
+
+  return raw;
+}
+
 export function sortGuests(
   guests: ProcessedGuest[],
   sortBy: SortKey,
@@ -23,16 +68,21 @@ export function sortGuests(
       }
 
       case 'alpha_name': {
-        const nameA = a.name.trim().toLowerCase();
-        const nameB = b.name.trim().toLowerCase();
-        result = nameA.localeCompare(nameB, 'ca', { sensitivity: 'base' });
+        const fnA = (a.first_name || a.name.split(' ')[0] || '').trim().toLowerCase();
+        const fnB = (b.first_name || b.name.split(' ')[0] || '').trim().toLowerCase();
+        result = fnA.localeCompare(fnB, 'ca', { sensitivity: 'base' });
+        if (result === 0) {
+          const nameA = formatFullNameSurnamesFirst(a).toLowerCase();
+          const nameB = formatFullNameSurnamesFirst(b).toLowerCase();
+          result = nameA.localeCompare(nameB, 'ca', { sensitivity: 'base' });
+        }
         break;
       }
 
       case 'alpha_lastname': {
-        const lnA = (a.last_name || a.name.split(' ').slice(1).join(' ')).trim().toLowerCase();
-        const lnB = (b.last_name || b.name.split(' ').slice(1).join(' ')).trim().toLowerCase();
-        result = lnA.localeCompare(lnB, 'ca', { sensitivity: 'base' });
+        const nameA = formatFullNameSurnamesFirst(a).toLowerCase();
+        const nameB = formatFullNameSurnamesFirst(b).toLowerCase();
+        result = nameA.localeCompare(nameB, 'ca', { sensitivity: 'base' });
         break;
       }
 

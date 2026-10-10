@@ -1,5 +1,5 @@
 import { EventAnalysis, ProcessedGuest, CustomExportOptions, AvailableColumnId, ALL_COLUMNS } from '../types';
-import { sortGuests } from './sorting';
+import { sortGuests, formatFullNameSurnamesFirst } from './sorting';
 import { DEFAULT_EXPORT_OPTIONS } from './exportExcel';
 
 export interface SyncResult {
@@ -22,7 +22,7 @@ function getGuestColumnValue(g: ProcessedGuest, col: AvailableColumnId): string 
     case 'seat':
       return g.seatNumber ?? '-';
     case 'name':
-      return g.name;
+      return formatFullNameSurnamesFirst(g);
     case 'first_name':
       return g.first_name || g.name.split(' ')[0] || '';
     case 'last_name':

@@ -46,17 +46,24 @@ export const ExportCustomModal: React.FC<ExportCustomModalProps> = ({
     } else {
       nextCols = [...options.columns, colId];
     }
+    if (nextCols.includes('name')) {
+      nextCols = ['name', ...nextCols.filter(c => c !== 'name')];
+    }
     onChangeOptions({ ...options, columns: nextCols });
   };
 
   const handleSelectAllColumns = () => {
-    onChangeOptions({ ...options, columns: ALL_COLUMNS.map(c => c.id) });
+    const allIds = ALL_COLUMNS.map(c => c.id);
+    onChangeOptions({
+      ...options,
+      columns: allIds.includes('name') ? ['name', ...allIds.filter(c => c !== 'name')] : allIds,
+    });
   };
 
   const handleSelectEssentialColumns = () => {
     onChangeOptions({
       ...options,
-      columns: ['table', 'seat', 'name', 'dish', 'phone', 'municipi'],
+      columns: ['name', 'table', 'municipi', 'comarca'],
     });
   };
 
