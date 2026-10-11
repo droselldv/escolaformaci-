@@ -24,10 +24,23 @@ interface FullTableViewProps {
   onEditGuest?: (guest: ProcessedGuest) => void;
 }
 
-function getColumnValue(g: ProcessedGuest, colId: AvailableColumnId): React.ReactNode {
+function getColumnValue(
+  g: ProcessedGuest,
+  colId: AvailableColumnId,
+  onEditGuest?: (g: ProcessedGuest) => void
+): React.ReactNode {
   switch (colId) {
     case 'name':
-      return <span className="font-semibold text-slate-900">{formatFullNameSurnamesFirst(g)}</span>;
+      return (
+        <button
+          type="button"
+          onClick={() => onEditGuest?.(g)}
+          className="font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer text-left"
+          title="Clic per editar assistent i canviar-li el nom"
+        >
+          {formatFullNameSurnamesFirst(g)}
+        </button>
+      );
     case 'table':
       return (
         <span className="whitespace-nowrap">
@@ -331,7 +344,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                             <tr key={g.guest_id} className="hover:bg-slate-50/70 transition group">
                               {visibleCols.map(colId => (
                                 <td key={colId} className="py-1.5 px-3 whitespace-nowrap">
-                                  {getColumnValue(g, colId)}
+                                  {getColumnValue(g, colId, onEditGuest)}
                                 </td>
                               ))}
                               <td className="py-1.5 px-3 text-right whitespace-nowrap">
@@ -376,7 +389,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                     <tr key={g.guest_id} className="hover:bg-slate-50/70 transition group">
                       {visibleCols.map(colId => (
                         <td key={colId} className="py-2 px-3 whitespace-nowrap">
-                          {getColumnValue(g, colId)}
+                          {getColumnValue(g, colId, onEditGuest)}
                         </td>
                       ))}
                       <td className="py-2 px-3 text-right whitespace-nowrap">
@@ -424,7 +437,16 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                 processedNoLunch.map((g, idx) => (
                   <tr key={g.guest_id} className="hover:bg-slate-50 transition">
                     <td className="py-2 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
-                    <td className="py-2 px-3 font-semibold text-slate-900">{g.name}</td>
+                    <td className="py-2 px-3">
+                      <button
+                        type="button"
+                        onClick={() => onEditGuest?.(g)}
+                        className="font-semibold text-slate-900 hover:text-blue-600 hover:underline cursor-pointer text-left"
+                        title="Clic per editar assistent i canviar-li el nom"
+                      >
+                        {formatFullNameSurnamesFirst(g)}
+                      </button>
+                    </td>
                     <td className="py-2 px-3 text-slate-600 font-mono">{g.phone_number || '-'}</td>
                     <td className="py-2 px-3 text-slate-600">{g.email}</td>
                     <td className="py-2 px-3 text-slate-600">

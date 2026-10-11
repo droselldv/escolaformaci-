@@ -25,6 +25,7 @@ interface TableSearchAndUnassignedProps {
   onUnassignGuest: (guest: ProcessedGuest) => void;
   onOpenAssignUnassigned: (guest: ProcessedGuest) => void;
   onCreateNewTable: () => void;
+  onEditGuest?: (guest: ProcessedGuest) => void;
 }
 
 export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> = ({
@@ -38,6 +39,7 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
   onUnassignGuest,
   onOpenAssignUnassigned,
   onCreateNewTable,
+  onEditGuest,
 }) => {
   const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true);
 
@@ -150,9 +152,14 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 text-sm">
+                      <button
+                        type="button"
+                        onClick={() => onEditGuest?.(g)}
+                        className="font-semibold text-slate-900 text-sm hover:text-blue-600 hover:underline cursor-pointer text-left"
+                        title="Clic per editar assistent i canviar-li el nom"
+                      >
                         {formatFullNameSurnamesFirst(g)}
-                      </span>
+                      </button>
                       <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">
                         {g.cleanDish}
                       </span>
@@ -268,9 +275,14 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
                 className="bg-white p-2.5 rounded-md border border-amber-200/80 flex items-center justify-between gap-2 shadow-2xs text-xs"
               >
                 <div className="min-w-0">
-                  <span className="font-semibold text-slate-900 block truncate">
+                  <button
+                    type="button"
+                    onClick={() => onEditGuest?.(g)}
+                    className="font-semibold text-slate-900 block truncate hover:text-blue-600 hover:underline cursor-pointer text-left"
+                    title="Clic per editar assistent i canviar-li el nom"
+                  >
                     {formatFullNameSurnamesFirst(g)}
-                  </span>
+                  </button>
                   <span className="text-[10px] text-slate-500 block truncate">
                     {g.cleanDish} {g.municipi ? `· ${g.municipi}` : ''}
                   </span>

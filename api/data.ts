@@ -3,11 +3,24 @@ import fs from 'fs';
 import path from 'path';
 import { INITIAL_LUMA_CSV } from '../src/data/initialData';
 
+const DEFAULT_OVERRIDES = {
+  'gst-4EiPYqOwuE90vqE': {
+    name: 'Manel Solà',
+    first_name: 'Manel',
+    last_name: 'Solà',
+  },
+  'pladurgell@aliancacatalana.cat': {
+    name: 'Manel Solà',
+    first_name: 'Manel',
+    last_name: 'Solà',
+  },
+};
+
 // Global cache across serverless warm invocations
 let memoryState = {
   csvText: INITIAL_LUMA_CSV,
   updatedAt: new Date().toISOString(),
-  manualOverrides: {},
+  manualOverrides: { ...DEFAULT_OVERRIDES },
   tableAssignments: {},
   spreadsheetId: null,
   spreadsheetUrl: null,

@@ -11,6 +11,8 @@ import {
   ProcessedGuest,
   CustomExportOptions,
   TableAssignmentsMap,
+  ManualOverridesMap,
+  ManualGuestOverride,
 } from './types';
 import { OverviewCards } from './components/OverviewCards';
 import { TableCard } from './components/TableCard';
@@ -41,15 +43,28 @@ export default function App() {
 
   const [sortMode, setSortMode] = useState<'chronological' | 'original'>('chronological');
 
-  // Manual dish / stays overrides
-  const [manualOverrides, setManualOverrides] = useState<
-    Record<string, { stays: boolean; dish: string }>
-  >(() => {
+  // Manual dish / stays / name overrides
+  const [manualOverrides, setManualOverrides] = useState<ManualOverridesMap>(() => {
     try {
       const saved = localStorage.getItem('luma_event_overrides');
-      return saved ? JSON.parse(saved) : {};
+      const base: ManualOverridesMap = saved ? JSON.parse(saved) : {};
+      // Ensure default mapping for Aliança Catalana Pla d'Urgell -> Manel Solà
+      if (!base['gst-4EiPYqOwuE90vqE']) {
+        base['gst-4EiPYqOwuE90vqE'] = {
+          name: 'Manel Solà',
+          first_name: 'Manel',
+          last_name: 'Solà',
+        };
+      }
+      return base;
     } catch {
-      return {};
+      return {
+        'gst-4EiPYqOwuE90vqE': {
+          name: 'Manel Solà',
+          first_name: 'Manel',
+          last_name: 'Solà',
+        },
+      };
     }
   });
 
@@ -159,19 +174,43 @@ export default function App() {
   }, [csvText]);
 
   const analysis = useMemo(() => {
-    let modifiedRaw = rawGuests;
-    if (Object.keys(manualOverrides).length > 0) {
-      modifiedRaw = rawGuests.map(g => {
-        const override = manualOverrides[g.guest_id];
-        if (override) {
-          return {
-            ...g,
-            dish_raw: override.stays ? override.dish : 'No em quedo al dinar',
-          };
+    const modifiedRaw = rawGuests.map(g => {
+      // Find override by guest_id, email, or name
+      const override =
+        manualOverrides[g.guest_id] ||
+        (g.email && manualOverrides[g.email]) ||
+        (g.name && manualOverrides[g.name]);
+
+      const res = { ...g };
+
+      // Ensure "Aliança Catalana Pla d'Urgell" is ALWAYS "Manel Solà" unless customized
+      const isAlianca =
+        g.guest_id === 'gst-4EiPYqOwuE90vqE' ||
+        (g.email && g.email.toLowerCase() === 'pladurgell@aliancacatalana.cat') ||
+        g.name.toLowerCase().replace(/['\s]/g, '').includes('aliancacatalanapladurgell') ||
+        g.name.toLowerCase().replace(/['\s]/g, '').includes('aliançacatalanapladurgell');
+
+      if (isAlianca && (!override || !override.name)) {
+        res.name = 'Manel Solà';
+        res.first_name = 'Manel';
+        res.last_name = 'Solà';
+      }
+
+      if (override) {
+        if (override.name) {
+          res.name = override.name;
+          res.first_name = override.first_name || override.name.split(' ')[0] || '';
+          res.last_name =
+            override.last_name !== undefined
+              ? override.last_name
+              : override.name.split(' ').slice(1).join(' ') || '';
         }
-        return g;
-      });
-    }
+        if (override.stays !== undefined) {
+          res.dish_raw = override.stays ? (override.dish || 'Carn - Cap de llom') : 'No em quedo al dinar';
+        }
+      }
+      return res;
+    });
 
     return processGuests(modifiedRaw, sortMode, 10, tableAssignments);
   }, [rawGuests, sortMode, manualOverrides, tableAssignments]);
@@ -326,9 +365,10 @@ export default function App() {
     const current = analysis.allGuests.find(g => g.guest_id === guestId);
     if (!current) return;
     const newStays = !current.staysForLunch;
-    const nextOverrides = {
+    const nextOverrides: ManualOverridesMap = {
       ...manualOverrides,
       [guestId]: {
+        ...manualOverrides[guestId],
         stays: newStays,
         dish: newStays ? 'Carn - Cap de llom' : 'No em quedo al dinar',
       },
@@ -337,16 +377,64 @@ export default function App() {
     saveToServer({ manualOverrides: nextOverrides });
   };
 
-  const handleSaveGuestEdit = (guestId: string, stays: boolean, dish: string) => {
-    const nextOverrides = {
-      ...manualOverrides,
-      [guestId]: {
-        stays,
-        dish,
-      },
+  const handleSaveGuestEdit = (
+    guestId: string,
+    stays: boolean,
+    dish: string,
+    newName?: string
+  ) => {
+    const currentGuest = analysis.allGuests.find(g => g.guest_id === guestId);
+    const finalName = newName !== undefined && newName.trim() ? newName.trim() : (currentGuest?.name || '');
+
+    let newFirstName = currentGuest?.first_name || '';
+    let newLastName = currentGuest?.last_name || '';
+
+    if (finalName) {
+      if (finalName.includes(',')) {
+        const parts = finalName.split(',');
+        newLastName = parts[0].trim();
+        newFirstName = parts.slice(1).join(',').trim();
+      } else {
+        const parts = finalName.split(/\s+/);
+        if (parts.length > 1) {
+          newFirstName = parts[0];
+          newLastName = parts.slice(1).join(' ');
+        } else {
+          newFirstName = parts[0];
+          newLastName = '';
+        }
+      }
+    }
+
+    const updatedOverride: ManualGuestOverride = {
+      ...manualOverrides[guestId],
+      stays,
+      dish,
+      name: finalName,
+      first_name: newFirstName,
+      last_name: newLastName,
     };
+
+    const nextOverrides: ManualOverridesMap = {
+      ...manualOverrides,
+      [guestId]: updatedOverride,
+    };
+
+    // Also link by email and previous name so that if new CSV lists are uploaded,
+    // the name change is remembered and preserved!
+    if (currentGuest?.email) {
+      nextOverrides[currentGuest.email] = updatedOverride;
+    }
+    if (currentGuest?.name && currentGuest.name !== finalName) {
+      nextOverrides[currentGuest.name] = updatedOverride;
+    }
+
     setManualOverrides(nextOverrides);
     saveToServer({ manualOverrides: nextOverrides });
+    setStatusMsg({
+      type: 'success',
+      text: `S'han desat els canvis per a ${finalName || currentGuest?.name}.`,
+    });
   };
 
   return (
@@ -357,12 +445,12 @@ export default function App() {
           {/* Logo & Title */}
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm tracking-tight shadow-2xs">
-              L
+              G
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-                  Luma Dinars & Taules
+                  Gestió Assistents
                 </h1>
                 <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
                   10/taula
@@ -537,6 +625,7 @@ export default function App() {
                 setTableModalMode({ type: 'assign_unassigned', guest })
               }
               onCreateNewTable={handleCreateNewTable}
+              onEditGuest={guest => setEditingGuest(guest)}
             />
 
             {/* Grid of Tables */}

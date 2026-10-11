@@ -5,17 +5,18 @@ import { X, Check, MapPin, Mail, Phone, Calendar } from 'lucide-react';
 interface EditGuestModalProps {
   guest: ProcessedGuest | null;
   onClose: () => void;
-  onSave: (guestId: string, staysForLunch: boolean, dish: string) => void;
+  onSave: (guestId: string, staysForLunch: boolean, dish: string, name?: string) => void;
 }
 
 export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, onSave }) => {
   if (!guest) return null;
 
+  const [name, setName] = useState(guest.name);
   const [stays, setStays] = useState(guest.staysForLunch);
   const [dish, setDish] = useState(guest.cleanDish);
 
   const handleSave = () => {
-    onSave(guest.guest_id, stays, dish);
+    onSave(guest.guest_id, stays, dish, name.trim());
     onClose();
   };
 
@@ -25,7 +26,7 @@ export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, 
         {/* Header */}
         <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900 text-sm">{guest.name}</h3>
+            <h3 className="font-semibold text-slate-900 text-sm">{name.trim() || guest.name}</h3>
             <p className="text-[11px] text-slate-500 font-mono">{guest.guest_id}</p>
           </div>
           <button
@@ -38,6 +39,27 @@ export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, 
 
         {/* Content */}
         <div className="p-5 space-y-4">
+          {/* Editable Name Field */}
+          <div>
+            <label className="font-semibold text-slate-800 flex items-center justify-between mb-1">
+              <span>Nom complet de l'assistent</span>
+              {name.trim() !== guest.name && (
+                <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                  Modificat
+                </span>
+              )}
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Nom i cognoms (ex: Manel Solà)"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition font-medium"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Pots modificar el nom i es desarà permanentment encara que pengis nous llistats.
+            </p>
+          </div>
           <div className="space-y-1.5 p-3 bg-slate-50 rounded border border-slate-200 text-slate-600">
             <div className="flex items-center gap-2">
               <Mail className="w-3.5 h-3.5 text-slate-400" />

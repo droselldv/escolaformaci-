@@ -36,6 +36,16 @@ export interface TableGroup {
   dishCounts: Record<string, number>;
 }
 
+export interface ManualGuestOverride {
+  stays?: boolean;
+  dish?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export type ManualOverridesMap = Record<string, ManualGuestOverride>;
+
 export interface TableAssignment {
   tableNumber: number | null; // null indicates unassigned
   seatNumber?: number | null;

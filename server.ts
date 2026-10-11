@@ -21,11 +21,24 @@ try {
   console.warn('Could not create data dir, fallback to memory/temp:', e);
 }
 
+const DEFAULT_OVERRIDES = {
+  'gst-4EiPYqOwuE90vqE': {
+    name: 'Manel Solà',
+    first_name: 'Manel',
+    last_name: 'Solà',
+  },
+  'pladurgell@aliancacatalana.cat': {
+    name: 'Manel Solà',
+    first_name: 'Manel',
+    last_name: 'Solà',
+  },
+};
+
 // In-memory state cache
 let stateCache = {
   csvText: INITIAL_LUMA_CSV,
   updatedAt: new Date().toISOString(),
-  manualOverrides: {} as Record<string, any>,
+  manualOverrides: { ...DEFAULT_OVERRIDES } as Record<string, any>,
   tableAssignments: {} as Record<string, { tableNumber: number | null; seatNumber?: number | null }>,
   spreadsheetId: null as string | null,
   spreadsheetUrl: null as string | null,
@@ -38,6 +51,10 @@ try {
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     stateCache = { ...stateCache, ...parsed };
+    stateCache.manualOverrides = {
+      ...DEFAULT_OVERRIDES,
+      ...(stateCache.manualOverrides || {}),
+    };
     console.log('Loaded persisted event data from disk.');
   } else {
     // Write initial seed

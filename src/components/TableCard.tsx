@@ -222,6 +222,15 @@ export const TableCard: React.FC<TableCardProps> = ({
                 <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 group-hover:opacity-100 transition">
                   <button
                     type="button"
+                    onClick={() => onEditGuest?.(guest)}
+                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-200/70 rounded transition cursor-pointer"
+                    title="Editar dades i canviar el nom"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => onOpenMove?.(guest)}
                     className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 rounded transition cursor-pointer"
                     title="Moure a una altra taula"

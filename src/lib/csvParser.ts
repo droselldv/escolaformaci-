@@ -153,9 +153,21 @@ export function parseLumaCSV(csvText: string, sortMode: 'chronological' | 'origi
 
     let finalFirstName = firstName.trim();
     let finalLastName = lastName.trim();
-    const finalFullName = (fullName || `${firstName} ${lastName}`).trim();
+    let finalFullName = (fullName || `${firstName} ${lastName}`).trim();
 
-    if (!finalFirstName && !finalLastName && finalFullName) {
+    // Check if this guest is "Aliança Catalana Pla d'Urgell"
+    const normalizedCheck = finalFullName.toLowerCase().replace(/['\s]/g, '');
+    const isAliancaPlaUrgell =
+      guestId === 'gst-4EiPYqOwuE90vqE' ||
+      (email && email.toLowerCase() === 'pladurgell@aliancacatalana.cat') ||
+      normalizedCheck.includes('aliancacatalanapladurgell') ||
+      normalizedCheck.includes('aliançacatalanapladurgell');
+
+    if (isAliancaPlaUrgell) {
+      finalFullName = 'Manel Solà';
+      finalFirstName = 'Manel';
+      finalLastName = 'Solà';
+    } else if (!finalFirstName && !finalLastName && finalFullName) {
       if (finalFullName.includes(',')) {
         const commaParts = finalFullName.split(',');
         finalLastName = commaParts[0].trim();
