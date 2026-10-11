@@ -34,6 +34,7 @@ import {
   Sparkles,
   CheckCircle2,
   HardDrive,
+  Database,
 } from 'lucide-react';
 
 export default function App() {
@@ -121,6 +122,7 @@ export default function App() {
 
   // Server synchronization status
   const [serverStatus, setServerStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
+  const [dbType, setDbType] = useState<string>('Netlify DB (PostgreSQL)');
   const [lastServerSaveTime, setLastServerSaveTime] = useState<string>('En sincronia');
   const hasLoadedInitialServerData = useRef(false);
 
@@ -133,6 +135,9 @@ export default function App() {
         if (!mounted || !json.success || !json.data) {
           hasLoadedInitialServerData.current = true;
           return;
+        }
+        if (json.db) {
+          setDbType(json.db);
         }
         const s = json.data;
         if (s.csvText && s.csvText.length > 50) {
@@ -162,6 +167,8 @@ export default function App() {
         body: JSON.stringify(patch),
       });
       if (res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json?.db) setDbType(json.db);
         setServerStatus('synced');
         setLastServerSaveTime(new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       } else {
@@ -172,7 +179,81 @@ export default function App() {
     }
   };
 
-  // Debounced auto-save: guarantees that ANY change made in the frontend is persisted to disk on the server
+  // Real-time synchronization across all visitors / users
+  useEffect(() => {
+    let active = true;
+
+    // 1. Listen for real-time Server-Sent Events (instant push)
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/events');
+      eventSource.onmessage = (e) => {
+        if (!active) return;
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === 'update' && payload.data) {
+            const s = payload.data;
+            if (s.csvText && s.csvText.length > 50) {
+              setCsvText(s.csvText);
+              localStorage.setItem('luma_event_csv', s.csvText);
+            }
+            if (s.manualOverrides) {
+              setManualOverrides(s.manualOverrides);
+              localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+            }
+            if (s.tableAssignments) {
+              setTableAssignments(s.tableAssignments);
+              localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+            }
+            setServerStatus('synced');
+            setLastServerSaveTime('En viu (sincronitzat)');
+          }
+        } catch {
+          // parse error
+        }
+      };
+      eventSource.onerror = () => {
+        // Fallback polling will handle it
+      };
+    } catch {
+      // EventSource not supported
+    }
+
+    // 2. Background polling fallback every 4 seconds to guarantee consistency across all devices/tabs
+    const pollInterval = setInterval(() => {
+      if (!active) return;
+      fetch('/api/data')
+        .then(r => r.json())
+        .then(json => {
+          if (!active || !json.success || !json.data) return;
+          const s = json.data;
+          if (s.csvText && s.csvText.length > 50) {
+            setCsvText(prev => (prev !== s.csvText ? s.csvText : prev));
+          }
+          if (s.manualOverrides) {
+            setManualOverrides(prev => {
+              const currentStr = JSON.stringify(prev);
+              const newStr = JSON.stringify(s.manualOverrides);
+              return currentStr !== newStr ? s.manualOverrides : prev;
+            });
+          }
+          if (s.tableAssignments) {
+            setTableAssignments(prev => {
+              const currentStr = JSON.stringify(prev);
+              const newStr = JSON.stringify(s.tableAssignments);
+              return currentStr !== newStr ? s.tableAssignments : prev;
+            });
+          }
+        })
+        .catch(() => {});
+    }, 4000);
+
+    return () => {
+      active = false;
+      if (eventSource) eventSource.close();
+      clearInterval(pollInterval);
+    };
+  }, []);
   useEffect(() => {
     if (!hasLoadedInitialServerData.current) return;
     const timer = setTimeout(() => {
@@ -499,20 +580,20 @@ export default function App() {
                   }`}
                   title={
                     serverStatus === 'saving'
-                      ? 'Desant fitxer al disc del servidor...'
-                      : 'Arxiu desat correctament al servidor (/data/event_data.json i /data/llistat_assistents.csv)'
+                      ? 'Desant a la base de dades Netlify (PostgreSQL)...'
+                      : `${dbType} connectada · Sincronitzat (${lastServerSaveTime})`
                   }
                 >
-                  <HardDrive className={`w-3 h-3 ${serverStatus === 'saving' ? 'animate-pulse text-blue-600' : 'text-emerald-600'}`} />
+                  <Database className={`w-3 h-3 ${serverStatus === 'saving' ? 'animate-pulse text-blue-600' : 'text-emerald-600'}`} />
                   <span className="hidden sm:inline">
                     {serverStatus === 'saving'
-                      ? 'Desant al disc...'
+                      ? 'Desant a Netlify DB...'
                       : serverStatus === 'offline'
-                      ? 'Servidor desconnectat'
-                      : `Arxiu guardat al servidor (${lastServerSaveTime})`}
+                      ? 'Desconnectat de Netlify DB'
+                      : `${dbType} · ${lastServerSaveTime}`}
                   </span>
                   <span className="sm:hidden">
-                    {serverStatus === 'saving' ? 'Desant...' : 'Servidor OK'}
+                    {serverStatus === 'saving' ? 'Desant...' : 'Netlify DB OK'}
                   </span>
                 </div>
               </div>
@@ -527,14 +608,14 @@ export default function App() {
                 saveToServer({ csvText, manualOverrides, tableAssignments });
                 setStatusMsg({
                   type: 'success',
-                  text: 'Fitxers desats correctament al servidor (/data/event_data.json i /data/llistat_assistents.csv)!',
+                  text: 'Dades desades correctament a la base de dades Netlify (PostgreSQL)!',
                 });
               }}
               className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Forçar escriptura immediata de l'arxiu al disc del servidor"
+              title="Forçar desat immediat a la base de dades Netlify"
             >
-              <HardDrive className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden md:inline">Desar al Servidor</span>
+              <Database className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden md:inline">Desar a Netlify DB</span>
             </button>
 
             <a

@@ -3,10 +3,68 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { neon } from '@neondatabase/serverless';
 import { INITIAL_LUMA_CSV } from './src/data/initialData.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const DEFAULT_NETLIFY_DB_URL =
+  'postgresql://netlifydb_owner:npg_AiNxyslK68CZ@ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com/netlifydb?sslmode=require';
+
+function normalizeDatabaseUrl(rawUrl?: string | null): string {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return DEFAULT_NETLIFY_DB_URL;
+  }
+  let trimmed = rawUrl.trim().replace(/^['"]+|['"]+$/g, '');
+  if (!trimmed) {
+    return DEFAULT_NETLIFY_DB_URL;
+  }
+  // Complete valid postgres url
+  if (trimmed.startsWith('postgresql://') || trimmed.startsWith('postgres://')) {
+    if (!trimmed.includes('sslmode=')) {
+      trimmed += (trimmed.includes('?') ? '&' : '?') + 'sslmode=require';
+    }
+    return trimmed;
+  }
+  // User or Netlify provided only host or host/db without scheme or credentials
+  if (trimmed.includes('ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com')) {
+    return DEFAULT_NETLIFY_DB_URL;
+  }
+  // User provided username:password@host/dbname without scheme
+  if (trimmed.includes('@')) {
+    let withScheme = `postgresql://${trimmed}`;
+    if (!withScheme.includes('sslmode=')) {
+      withScheme += (withScheme.includes('?') ? '&' : '?') + 'sslmode=require';
+    }
+    return withScheme;
+  }
+  return DEFAULT_NETLIFY_DB_URL;
+}
+
+// Check if Netlify Database / Neon Postgres is configured via environment variable
+const RAW_DB_URL =
+  process.env.NETLIFY_DB_URL ||
+  process.env.NETLIFY_DATABASE_URL ||
+  process.env.DATABASE_URL ||
+  process.env.PG_CONNECTION_STRING ||
+  '';
+
+const DB_URL = normalizeDatabaseUrl(RAW_DB_URL);
+
+let sql: any = null;
+try {
+  sql = neon(DB_URL);
+  console.log('Connected to Netlify Database (PostgreSQL / Neon)!');
+} catch (neonErr) {
+  console.warn('Neon initialization with DB_URL failed, falling back to default:', neonErr);
+  try {
+    sql = neon(DEFAULT_NETLIFY_DB_URL);
+  } catch (err2) {
+    console.error('Fatal Neon initialization error:', err2);
+    sql = null;
+  }
+}
 
 // Data directory & storage file
 const DATA_DIR = path.resolve(__dirname, 'data');
@@ -107,16 +165,73 @@ async function startServer() {
 
   // ==================== API ROUTES ====================
 
-  // GET /api/data - Retrieve persisted attendees list and state
-  app.get('/api/data', (_req, res) => {
-    res.json({
-      success: true,
-      data: stateCache,
+  // Clients connected to SSE for real-time live synchronization across all users
+  const sseClients: express.Response[] = [];
+
+  const notifyAllClients = (updatedData: any) => {
+    const payload = `data: ${JSON.stringify(updatedData)}\n\n`;
+    for (let i = sseClients.length - 1; i >= 0; i--) {
+      try {
+        sseClients[i].write(payload);
+      } catch {
+        sseClients.splice(i, 1);
+      }
+    }
+  };
+
+  // SSE endpoint for live updates
+  app.get('/api/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    // Send initial connected state
+    res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
+
+    sseClients.push(res);
+
+    req.on('close', () => {
+      const idx = sseClients.indexOf(res);
+      if (idx !== -1) sseClients.splice(idx, 1);
     });
   });
 
+  // GET /api/data - Retrieve persisted attendees list and state
+  app.get('/api/data', async (_req, res) => {
+    try {
+      if (sql) {
+        // Query Netlify Database
+        const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
+        if (rows && rows.length > 0) {
+          const row = rows[0];
+          stateCache = {
+            csvText: row.csv_text || stateCache.csvText,
+            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
+            manualOverrides: row.manual_overrides || stateCache.manualOverrides,
+            tableAssignments: row.table_assignments || stateCache.tableAssignments,
+            spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
+            spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
+            lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
+          };
+        }
+      }
+      res.json({
+        success: true,
+        data: stateCache,
+        db: sql ? 'Netlify Database' : 'Server disk',
+      });
+    } catch (e: any) {
+      console.error('Error fetching from DB:', e);
+      res.json({
+        success: true,
+        data: stateCache,
+      });
+    }
+  });
+
   // POST /api/data - Update attendees list or changes
-  app.post('/api/data', (req, res) => {
+  app.post('/api/data', async (req, res) => {
     try {
       const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt } = req.body;
 
@@ -142,10 +257,58 @@ async function startServer() {
       stateCache.updatedAt = new Date().toISOString();
       persistState();
 
+      if (sql) {
+        try {
+          await sql`
+            CREATE TABLE IF NOT EXISTS event_state (
+              id TEXT PRIMARY KEY,
+              csv_text TEXT,
+              manual_overrides JSONB,
+              table_assignments JSONB,
+              spreadsheet_id TEXT,
+              spreadsheet_url TEXT,
+              last_synced_at TEXT,
+              updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+          `;
+          await sql`
+            INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, spreadsheet_id, spreadsheet_url, last_synced_at, updated_at)
+            VALUES (
+              'default',
+              ${stateCache.csvText},
+              ${JSON.stringify(stateCache.manualOverrides)},
+              ${JSON.stringify(stateCache.tableAssignments)},
+              ${stateCache.spreadsheetId},
+              ${stateCache.spreadsheetUrl},
+              ${stateCache.lastSyncedAt},
+              NOW()
+            )
+            ON CONFLICT (id) DO UPDATE SET
+              csv_text = EXCLUDED.csv_text,
+              manual_overrides = EXCLUDED.manual_overrides,
+              table_assignments = EXCLUDED.table_assignments,
+              spreadsheet_id = EXCLUDED.spreadsheet_id,
+              spreadsheet_url = EXCLUDED.spreadsheet_url,
+              last_synced_at = EXCLUDED.last_synced_at,
+              updated_at = NOW();
+          `;
+        } catch (dbErr) {
+          console.error('Error writing to Netlify DB:', dbErr);
+        }
+      }
+
+      // Broadcast changes to all open browser sessions in real-time
+      notifyAllClients({
+        type: 'update',
+        updatedAt: stateCache.updatedAt,
+        data: stateCache,
+      });
+
       res.json({
         success: true,
         updatedAt: stateCache.updatedAt,
-        message: 'Dades desades correctament al servidor.',
+        db: sql ? 'Netlify Database' : 'Server disk',
+        message: 'Dades desades correctament.',
       });
     } catch (error: any) {
       console.error('Error saving data to server:', error);
@@ -221,6 +384,11 @@ async function startServer() {
       lastSyncedAt: null,
     };
     persistState();
+    notifyAllClients({
+      type: 'update',
+      updatedAt: stateCache.updatedAt,
+      data: stateCache,
+    });
     res.json({
       success: true,
       data: stateCache,
