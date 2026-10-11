@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { INITIAL_LUMA_CSV } from './data/initialData';
 import { parseLumaCSV, processGuests } from './lib/csvParser';
 import { downloadExcelFile, DEFAULT_EXPORT_OPTIONS } from './lib/exportExcel';
@@ -33,12 +33,22 @@ import {
   Printer,
   Sparkles,
   CheckCircle2,
+  HardDrive,
 } from 'lucide-react';
 
 export default function App() {
   // 1. Event & Guests Data State
   const [csvText, setCsvText] = useState<string>(() => {
-    return localStorage.getItem('luma_event_csv') || INITIAL_LUMA_CSV;
+    try {
+      const saved = localStorage.getItem('luma_event_csv');
+      // If saved has fewer rows/length than updated INITIAL_LUMA_CSV (105 attendees), prefer INITIAL_LUMA_CSV
+      if (saved && saved.length >= INITIAL_LUMA_CSV.length - 100) {
+        return saved;
+      }
+      return INITIAL_LUMA_CSV;
+    } catch {
+      return INITIAL_LUMA_CSV;
+    }
   });
 
   const [sortMode, setSortMode] = useState<'chronological' | 'original'>('chronological');
@@ -111,6 +121,8 @@ export default function App() {
 
   // Server synchronization status
   const [serverStatus, setServerStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
+  const [lastServerSaveTime, setLastServerSaveTime] = useState<string>('En sincronia');
+  const hasLoadedInitialServerData = useRef(false);
 
   // Load persisted state from server on mount
   useEffect(() => {
@@ -118,15 +130,23 @@ export default function App() {
     fetch('/api/data')
       .then(res => res.json())
       .then(json => {
-        if (!mounted || !json.success || !json.data) return;
+        if (!mounted || !json.success || !json.data) {
+          hasLoadedInitialServerData.current = true;
+          return;
+        }
         const s = json.data;
-        if (s.csvText && s.csvText.length > 50) setCsvText(s.csvText);
+        if (s.csvText && s.csvText.length > 50) {
+          setCsvText(s.csvText);
+          localStorage.setItem('luma_event_csv', s.csvText);
+        }
         if (s.manualOverrides) setManualOverrides(s.manualOverrides);
         if (s.tableAssignments) setTableAssignments(s.tableAssignments);
         setServerStatus('synced');
+        hasLoadedInitialServerData.current = true;
       })
       .catch(() => {
         setServerStatus('synced');
+        hasLoadedInitialServerData.current = true;
       });
     return () => {
       mounted = false;
@@ -143,6 +163,7 @@ export default function App() {
       });
       if (res.ok) {
         setServerStatus('synced');
+        setLastServerSaveTime(new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       } else {
         setServerStatus('offline');
       }
@@ -150,6 +171,19 @@ export default function App() {
       setServerStatus('offline');
     }
   };
+
+  // Debounced auto-save: guarantees that ANY change made in the frontend is persisted to disk on the server
+  useEffect(() => {
+    if (!hasLoadedInitialServerData.current) return;
+    const timer = setTimeout(() => {
+      saveToServer({
+        csvText,
+        manualOverrides,
+        tableAssignments,
+      });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [csvText, manualOverrides, tableAssignments]);
 
   // Local storage persistence
   useEffect(() => {
@@ -455,37 +489,64 @@ export default function App() {
                 <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
                   10/taula
                 </span>
-                <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full hidden sm:inline-flex items-center gap-1 ${
+                <div
+                  className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5 ${
                     serverStatus === 'saving'
                       ? 'bg-blue-50 text-blue-700'
                       : serverStatus === 'offline'
                       ? 'bg-amber-50 text-amber-700'
-                      : 'bg-emerald-50 text-emerald-700'
+                      : 'bg-emerald-50 text-emerald-800'
                   }`}
                   title={
                     serverStatus === 'saving'
-                      ? 'Desant canvis al servidor...'
-                      : 'Dades sincronitzades amb el servidor'
+                      ? 'Desant fitxer al disc del servidor...'
+                      : 'Arxiu desat correctament al servidor (/data/event_data.json i /data/llistat_assistents.csv)'
                   }
                 >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      serverStatus === 'saving'
-                        ? 'bg-blue-500 animate-pulse'
-                        : serverStatus === 'offline'
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
-                    }`}
-                  />
-                  <span>{serverStatus === 'saving' ? 'Desant...' : 'Servidor sincronitzat'}</span>
-                </span>
+                  <HardDrive className={`w-3 h-3 ${serverStatus === 'saving' ? 'animate-pulse text-blue-600' : 'text-emerald-600'}`} />
+                  <span className="hidden sm:inline">
+                    {serverStatus === 'saving'
+                      ? 'Desant al disc...'
+                      : serverStatus === 'offline'
+                      ? 'Servidor desconnectat'
+                      : `Arxiu guardat al servidor (${lastServerSaveTime})`}
+                  </span>
+                  <span className="sm:hidden">
+                    {serverStatus === 'saving' ? 'Desant...' : 'Servidor OK'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Quick Header Action */}
+          {/* Quick Header Actions */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                saveToServer({ csvText, manualOverrides, tableAssignments });
+                setStatusMsg({
+                  type: 'success',
+                  text: 'Fitxers desats correctament al servidor (/data/event_data.json i /data/llistat_assistents.csv)!',
+                });
+              }}
+              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Forçar escriptura immediata de l'arxiu al disc del servidor"
+            >
+              <HardDrive className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden md:inline">Desar al Servidor</span>
+            </button>
+
+            <a
+              href="/api/data/download-csv"
+              download="llistat_assistents_servidor.csv"
+              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Descarregar directament l'arxiu CSV guardat al servidor"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden md:inline">Baixar CSV Servidor</span>
+            </a>
+
             <button
               onClick={() => setIsPrintOpen(true)}
               className="text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg px-3 py-1.5 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
