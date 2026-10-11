@@ -54,7 +54,7 @@ export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, 
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Nom i cognoms (ex: Manel Solà)"
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition font-medium"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-base sm:text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition font-medium min-h-[42px] sm:min-h-0"
             />
             <p className="text-[11px] text-slate-500 mt-1">
               Pots modificar el nom i es desarà permanentment encara que pengis nous llistats.
@@ -155,16 +155,16 @@ export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, 
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 rounded transition cursor-pointer"
+            className="px-3.5 py-2 sm:py-1.5 text-xs text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer min-h-[38px] sm:min-h-0 text-center"
           >
             Cancel·lar
           </button>
           <button
             onClick={handleSave}
-            className="px-3.5 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 sm:py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] sm:min-h-0 shadow-2xs"
           >
             <Check className="w-3.5 h-3.5" />
             <span>Desar Canvis</span>

@@ -195,14 +195,14 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+              <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
                     onUnassignGuest(mode.guest);
                     onClose();
                   }}
-                  className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2.5 py-1.5 rounded text-xs font-medium transition cursor-pointer"
+                  className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2.5 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-center min-h-[38px] sm:min-h-0"
                 >
                   Treure de la taula (Deixar sense taula)
                 </button>
@@ -211,14 +211,14 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                    className="flex-1 sm:flex-none px-3.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer min-h-[38px] sm:min-h-0 text-center"
                   >
                     Cancel·lar
                   </button>
                   <button
                     type="button"
                     onClick={handleConfirmMove}
-                    className="px-4 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer"
+                    className="flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer min-h-[38px] sm:min-h-0 text-center shadow-2xs"
                   >
                     Moure a Taula {targetTable}
                   </button>
@@ -294,11 +294,11 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  className="px-3.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer min-h-[38px] sm:min-h-0 text-center"
                 >
                   Cancel·lar
                 </button>
@@ -306,7 +306,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                   type="button"
                   disabled={!selectedSwapGuestId}
                   onClick={handleConfirmSwap}
-                  className="px-4 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer disabled:opacity-40"
+                  className="px-4 py-2 sm:py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer disabled:opacity-40 min-h-[38px] sm:min-h-0 text-center shadow-2xs"
                 >
                   Intercanviar seients
                 </button>
@@ -388,11 +388,11 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  className="px-3.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer min-h-[38px] sm:min-h-0 text-center"
                 >
                   Cancel·lar
                 </button>
@@ -400,7 +400,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                   type="button"
                   disabled={!selectedAddGuestId}
                   onClick={handleConfirmAddToSeat}
-                  className="px-4 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer disabled:opacity-40"
+                  className="px-4 py-2 sm:py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer disabled:opacity-40 min-h-[38px] sm:min-h-0 text-center shadow-2xs"
                 >
                   Assignar a Seient #{mode.seatNumber}
                 </button>
@@ -474,18 +474,18 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  className="px-3.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer min-h-[38px] sm:min-h-0 text-center"
                 >
                   Cancel·lar
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmAssignUnassigned}
-                  className="px-4 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer"
+                  className="px-4 py-2 sm:py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold transition cursor-pointer min-h-[38px] sm:min-h-0 text-center shadow-2xs"
                 >
                   Assignar a Taula {targetTable}
                 </button>

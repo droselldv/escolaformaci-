@@ -43,19 +43,19 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis }) => {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
       {cards.map(c => (
         <div
           key={c.label}
-          className="bg-white rounded-lg p-3.5 border border-slate-200"
+          className="bg-white rounded-lg p-2.5 sm:p-3.5 border border-slate-200 shadow-2xs hover:border-slate-300 transition"
         >
-          <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1">
+          <div className="text-[10px] sm:text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-0.5 sm:mb-1 truncate" title={c.label}>
             {c.label}
           </div>
-          <div className="text-2xl font-semibold text-slate-900 tracking-tight">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-mono tabular-nums">
             {c.value}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">
+          <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate" title={c.detail}>
             {c.detail}
           </div>
         </div>

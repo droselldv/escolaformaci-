@@ -176,24 +176,24 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col text-xs">
       {/* Tab Navigation */}
-      <div className="border-b border-slate-200 bg-slate-50/50 px-4 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+      <div className="border-b border-slate-200 bg-slate-50/50 px-3 sm:px-4 pt-2.5 pb-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-4 overflow-x-auto no-scrollbar pb-1 sm:pb-0 -mx-1 px-1">
           <button
             onClick={() => setActiveSheet('sheet1')}
-            className={`pb-1 font-semibold transition border-b-2 cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-0 sm:py-0 sm:pb-1 font-semibold transition border-b-2 whitespace-nowrap shrink-0 cursor-pointer rounded sm:rounded-none ${
               activeSheet === 'sheet1'
-                ? 'border-slate-900 text-slate-900'
+                ? 'border-slate-900 text-slate-900 bg-white sm:bg-transparent shadow-2xs sm:shadow-none'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            1. Assistents Dinar ({analysis.totalLunch})
+            1. Dinar ({analysis.totalLunch})
           </button>
 
           <button
             onClick={() => setActiveSheet('sheet2')}
-            className={`pb-1 font-semibold transition border-b-2 cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-0 sm:py-0 sm:pb-1 font-semibold transition border-b-2 whitespace-nowrap shrink-0 cursor-pointer rounded sm:rounded-none ${
               activeSheet === 'sheet2'
-                ? 'border-slate-900 text-slate-900'
+                ? 'border-slate-900 text-slate-900 bg-white sm:bg-transparent shadow-2xs sm:shadow-none'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -202,24 +202,24 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
 
           <button
             onClick={() => setActiveSheet('sheet3')}
-            className={`pb-1 font-semibold transition border-b-2 cursor-pointer ${
+            className={`px-2.5 py-1.5 sm:px-0 sm:py-0 sm:pb-1 font-semibold transition border-b-2 whitespace-nowrap shrink-0 cursor-pointer rounded sm:rounded-none ${
               activeSheet === 'sheet3'
-                ? 'border-slate-900 text-slate-900'
+                ? 'border-slate-900 text-slate-900 bg-white sm:bg-transparent shadow-2xs sm:shadow-none'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            3. Resum Plats & Cuina
+            3. Resum Cuina
           </button>
         </div>
 
         {/* View & Column Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {activeSheet !== 'sheet3' && (
             <>
               <button
                 type="button"
                 onClick={() => onChangeOptions({ ...options, groupByTables: !options.groupByTables })}
-                className="px-2.5 py-1 text-xs font-medium rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 cursor-pointer min-h-[36px] sm:min-h-0 shadow-2xs"
               >
                 <Layers className="w-3.5 h-3.5 text-slate-500" />
                 <span>{options.groupByTables ? 'Per taules' : 'Llistat continu'}</span>
@@ -228,7 +228,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
               <select
                 value={options.sortBy}
                 onChange={e => onChangeOptions({ ...options, sortBy: e.target.value as SortKey })}
-                className="text-xs bg-white border border-slate-200 rounded px-2.5 py-1 text-slate-700 font-medium cursor-pointer focus:outline-none"
+                className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium cursor-pointer focus:outline-none min-h-[36px] sm:min-h-0 shadow-2xs"
               >
                 <option value="alpha_name">Alfabètic per nom</option>
                 <option value="alpha_lastname">Alfabètic per cognom</option>
@@ -240,7 +240,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
 
               <button
                 onClick={onOpenCustomModal}
-                className="px-2.5 py-1 text-xs font-medium rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1.5 cursor-pointer min-h-[36px] sm:min-h-0 shadow-2xs"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
                 <span>Columnes ({options.columns.length})</span>
@@ -252,25 +252,25 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
 
       {/* Filter Bar */}
       {activeSheet !== 'sheet3' && (
-        <div className="p-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="p-3 bg-white border-b border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
           <div className="relative flex-1 sm:max-w-xs">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Cercar assistent..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 text-xs bg-slate-50 border border-slate-200 rounded focus:outline-none focus:bg-white focus:border-slate-400"
+              className="w-full pl-8 pr-3 py-2 sm:py-1.5 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-slate-400 min-h-[38px] sm:min-h-0"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {activeSheet === 'sheet1' && (
               <>
                 <select
                   value={filterTable}
                   onChange={e => setFilterTable(e.target.value)}
-                  className="text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-slate-700 focus:outline-none cursor-pointer"
+                  className="flex-1 sm:flex-none text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 focus:outline-none cursor-pointer min-h-[36px] sm:min-h-0"
                 >
                   <option value="all">Totes les taules</option>
                   {analysis.tables.map(t => (
@@ -283,7 +283,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                 <select
                   value={filterDish}
                   onChange={e => setFilterDish(e.target.value)}
-                  className="text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-slate-700 focus:outline-none cursor-pointer"
+                  className="flex-1 sm:flex-none text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 focus:outline-none cursor-pointer min-h-[36px] sm:min-h-0"
                 >
                   <option value="all">Tots els plats</option>
                   <option value="carn">Carn - Cap de llom</option>
@@ -292,7 +292,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
               </>
             )}
 
-            <span className="text-[11px] text-slate-400 ml-1">
+            <span className="text-[11px] text-slate-400 ml-auto sm:ml-1 font-mono">
               {activeSheet === 'sheet1' ? processedLunch.length : processedNoLunch.length} registres
             </span>
           </div>

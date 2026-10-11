@@ -208,9 +208,9 @@ export const TableCard: React.FC<TableCardProps> = ({
                 </div>
               </div>
 
-              {/* Dish tag and quick actions */}
+          {/* Dish tag and quick actions */}
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[11px] text-slate-600 font-medium whitespace-nowrap bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                <span className="text-[11px] text-slate-600 font-medium whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded text-[10px]">
                   {guest.cleanDish.includes('Carn')
                     ? 'Carn'
                     : guest.cleanDish.includes('Peix')
@@ -218,8 +218,8 @@ export const TableCard: React.FC<TableCardProps> = ({
                     : guest.cleanDish}
                 </span>
 
-                {/* Quick actions popup / buttons */}
-                <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 group-hover:opacity-100 transition">
+                {/* Desktop hover actions */}
+                <div className="hidden sm:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">
                   <button
                     type="button"
                     onClick={() => onEditGuest?.(guest)}
@@ -255,6 +255,83 @@ export const TableCard: React.FC<TableCardProps> = ({
                   >
                     <UserMinus className="w-3.5 h-3.5" />
                   </button>
+                </div>
+
+                {/* Mobile Touch Action Button (Clean three dots to avoid clutter) */}
+                <div className="relative sm:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setActiveMenuGuestId(isMenuOpen ? null : guest.guest_id)}
+                    className={`min-w-[34px] min-h-[34px] flex items-center justify-center rounded-md transition cursor-pointer ${
+                      isMenuOpen
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-500 hover:bg-slate-200/70'
+                    }`}
+                    title="Opcions del comensal"
+                    aria-label="Opcions del comensal"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+
+                  {/* Mobile Popover Menu */}
+                  {isMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-30"
+                        onClick={() => setActiveMenuGuestId(null)}
+                      />
+                      <div className="absolute right-0 top-full mt-1 z-40 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 min-w-[190px] text-xs animate-in fade-in zoom-in-95 duration-100">
+                        <div className="px-3 py-1.5 border-b border-slate-100 font-semibold text-slate-800 text-[11px] truncate">
+                          {formatFullNameSurnamesFirst(guest)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuGuestId(null);
+                            onEditGuest?.(guest);
+                          }}
+                          className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer active:bg-slate-100"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Editar nom i dades</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuGuestId(null);
+                            onOpenMove?.(guest);
+                          }}
+                          className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer active:bg-slate-100"
+                        >
+                          <MoveRight className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Moure a una altra taula</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuGuestId(null);
+                            onOpenSwap?.(guest);
+                          }}
+                          className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 text-slate-700 cursor-pointer active:bg-slate-100"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Intercanviar de lloc</span>
+                        </button>
+                        <div className="border-t border-slate-100 my-1" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuGuestId(null);
+                            onUnassignGuest?.(guest);
+                          }}
+                          className="w-full px-3 py-2 text-left hover:bg-rose-50 flex items-center gap-2 text-rose-600 cursor-pointer active:bg-rose-100"
+                        >
+                          <UserMinus className="w-3.5 h-3.5" />
+                          <span>Treure de la taula</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

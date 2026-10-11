@@ -38,6 +38,8 @@ import {
   RefreshCw,
   Check,
   AlertCircle,
+  LayoutGrid,
+  FileText,
 } from 'lucide-react';
 
 export default function App() {
@@ -612,22 +614,22 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col antialiased selection:bg-blue-500/10 selection:text-blue-900">
       {/* Top Header - Clean, Minimalist Enterprise */}
       <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-4">
           {/* Logo & Title */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm tracking-tight shadow-2xs">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs sm:text-sm tracking-tight shadow-2xs shrink-0">
               G
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h1 className="text-xs sm:text-base font-bold text-slate-900 tracking-tight truncate">
                   Gestió Assistents
                 </h1>
-                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                <span className="hidden xs:inline-block text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
                   10/taula
                 </span>
                 <div
-                  className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5 ${
+                  className={`text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0 ${
                     serverStatus === 'saving'
                       ? 'bg-blue-50 text-blue-700'
                       : serverStatus === 'offline'
@@ -645,11 +647,11 @@ export default function App() {
                     {serverStatus === 'saving'
                       ? 'Desant a Netlify DB...'
                       : serverStatus === 'offline'
-                      ? 'Desconnectat de Netlify DB'
+                      ? 'Desconnectat'
                       : `${dbType} · ${lastServerSaveTime}`}
                   </span>
-                  <span className="sm:hidden">
-                    {serverStatus === 'saving' ? 'Desant...' : 'Netlify DB OK'}
+                  <span className="sm:hidden font-mono text-[10px]">
+                    {serverStatus === 'saving' ? 'Desant...' : 'BBDD OK'}
                   </span>
                 </div>
               </div>
@@ -657,16 +659,17 @@ export default function App() {
           </div>
 
           {/* Quick Header Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Sync from DB button */}
             <button
               type="button"
               onClick={() => syncFromServer(true)}
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Carregar de nou l'estat actual de la base de dades"
+              className="p-2 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs min-h-[36px] sm:min-h-0"
+              title="Carregar de nou l'estat actual de la base de dades Netlify"
+              aria-label="Sincronitzar de la BBDD"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${serverStatus === 'saving' ? 'animate-spin' : ''}`} />
-              <span className="hidden lg:inline">Sincronitzar de la BBDD</span>
+              <span className="hidden lg:inline">Sincronitzar</span>
             </button>
 
             {/* Manual Send / Save to DB button */}
@@ -675,7 +678,7 @@ export default function App() {
               onClick={() => {
                 saveToServer({ csvText, manualOverrides, tableAssignments }, true);
               }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[36px] sm:min-h-0 ${
                 hasPendingChanges
                   ? 'bg-blue-600 hover:bg-blue-700 text-white animate-pulse'
                   : 'bg-emerald-700 hover:bg-emerald-800 text-white'
@@ -683,7 +686,8 @@ export default function App() {
               title="Enviar i desar immediatament tots els canvis a la base de dades Netlify"
             >
               <Database className="w-3.5 h-3.5" />
-              <span>{hasPendingChanges ? 'Enviar canvis a BBDD' : 'Guardat a la BBDD'}</span>
+              <span className="hidden sm:inline">{hasPendingChanges ? 'Enviar canvis a BBDD' : 'Guardat a la BBDD'}</span>
+              <span className="sm:hidden">{hasPendingChanges ? 'Desar' : 'Desat'}</span>
               {hasPendingChanges && (
                 <span className="w-2 h-2 rounded-full bg-amber-300"></span>
               )}
@@ -692,16 +696,16 @@ export default function App() {
             <a
               href="/api/data/download-csv"
               download="llistat_assistents_servidor.csv"
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="hidden md:inline-flex px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition items-center gap-1.5 cursor-pointer shadow-2xs"
               title="Descarregar directament l'arxiu CSV guardat al servidor"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden md:inline">Baixar CSV Servidor</span>
+              <span className="hidden lg:inline">Baixar CSV Servidor</span>
             </a>
 
             <button
               onClick={() => setIsPrintOpen(true)}
-              className="text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg px-3 py-1.5 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="hidden sm:inline-flex text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg px-3 py-1.5 transition items-center gap-1.5 cursor-pointer shadow-2xs"
               title="Descarregar o imprimir llistat en PDF net"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -712,7 +716,7 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex-1 space-y-4 w-full">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5 flex-1 space-y-4 w-full pb-24 sm:pb-6">
         {/* Status Alert if any */}
         {statusMsg && (
           <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-2xs flex items-center justify-between gap-3 text-xs">
@@ -730,44 +734,26 @@ export default function App() {
         )}
 
         {/* Enterprise Toolbar */}
-        <div className="bg-white rounded-lg p-3 border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-white rounded-lg p-3 sm:p-3.5 border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs shadow-2xs">
           {/* Summary status text */}
-          <div className="flex items-center gap-2 text-slate-600">
-            <span className="font-semibold text-slate-900">
+          <div className="flex items-center gap-2 text-slate-600 flex-wrap">
+            <span className="font-bold text-slate-900">
               {analysis.totalLunch} comensals
             </span>
             <span className="text-slate-300">·</span>
-            <span>{analysis.totalTables} taules de 10</span>
+            <span className="font-medium text-slate-700">{analysis.totalTables} taules de 10</span>
             <span className="text-slate-300 hidden sm:inline">·</span>
             <span className="text-slate-500 hidden sm:inline">
               Ordre: {exportOptions.sortBy === 'alpha_name' ? 'Alfabètic per nom' : exportOptions.sortBy === 'alpha_lastname' ? 'Alfabètic per cognom' : 'Per taula'}
             </span>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 flex-wrap ml-auto">
-            <button
-              onClick={() => setIsCustomExportOpen(true)}
-              className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded transition flex items-center gap-1.5 cursor-pointer"
-              title="Personalitzar columnes, ordre alfabètic i agrupació"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-              <span>Personalitzar Exportació</span>
-            </button>
-
-            <button
-              onClick={handleExportLocalExcel}
-              className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded transition flex items-center gap-1.5 cursor-pointer"
-              title="Descarregar fitxer Excel amb els 3 fulls i columnes triades"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>Descarregar Excel</span>
-            </button>
-
-            {/* Prominent black download button (replaces drive button as requested) */}
+          {/* Action buttons responsive grid */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+            {/* Prominent black download button (Full width on mobile) */}
             <button
               onClick={() => setIsPrintOpen(true)}
-              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="col-span-2 sm:col-span-1 px-3.5 py-2 sm:py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[38px] sm:min-h-0"
               title="Descarregar o imprimir llistat en format PDF net i ordenat"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -775,12 +761,30 @@ export default function App() {
             </button>
 
             <button
+              onClick={handleExportLocalExcel}
+              className="px-3 py-2 sm:py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] sm:min-h-0 shadow-2xs"
+              title="Descarregar fitxer Excel amb els 3 fulls i columnes triades"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Excel</span>
+            </button>
+
+            <button
+              onClick={() => setIsCustomExportOpen(true)}
+              className="px-3 py-2 sm:py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] sm:min-h-0 shadow-2xs"
+              title="Personalitzar columnes, ordre alfabètic i agrupació"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+              <span>Personalitzar</span>
+            </button>
+
+            <button
               onClick={() => setIsImportOpen(true)}
-              className="px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded transition flex items-center gap-1.5 cursor-pointer"
+              className="col-span-2 sm:col-span-1 px-3 py-2 sm:py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 sm:border-transparent rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] sm:min-h-0"
               title="Importar nova exportació periòdica de Luma"
             >
               <Upload className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden sm:inline">Nou Informe</span>
+              <span>Nou Informe CSV</span>
             </button>
           </div>
         </div>
@@ -788,33 +792,35 @@ export default function App() {
         {/* Minimalist Metrics Cards */}
         <OverviewCards analysis={analysis} />
 
-        {/* View Mode Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
-          <div className="flex items-center gap-4 border-b border-slate-200 w-full sm:w-auto pb-1">
+        {/* View Mode Bar - Segmented Control for Mobile */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs pt-1">
+          <div className="grid grid-cols-2 p-1 bg-slate-200/80 rounded-xl sm:flex sm:bg-transparent sm:p-0 sm:gap-4 sm:border-b sm:border-slate-200 w-full sm:w-auto text-center font-medium">
             <button
               onClick={() => setViewTab('tables')}
-              className={`pb-1 font-semibold transition border-b-2 cursor-pointer ${
+              className={`py-2 sm:py-1 px-3 rounded-lg sm:rounded-none font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 viewTab === 'tables'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'bg-white sm:bg-transparent text-slate-900 sm:border-b-2 sm:border-slate-900 shadow-2xs sm:shadow-none'
+                  : 'text-slate-600 hover:text-slate-900 border-transparent'
               }`}
             >
-              Taules ({analysis.totalTables})
+              <LayoutGrid className="w-3.5 h-3.5 sm:hidden" />
+              <span>Taules ({analysis.totalTables})</span>
             </button>
 
             <button
               onClick={() => setViewTab('sheets')}
-              className={`pb-1 font-semibold transition border-b-2 cursor-pointer ${
+              className={`py-2 sm:py-1 px-3 rounded-lg sm:rounded-none font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 viewTab === 'sheets'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'bg-white sm:bg-transparent text-slate-900 sm:border-b-2 sm:border-slate-900 shadow-2xs sm:shadow-none'
+                  : 'text-slate-600 hover:text-slate-900 border-transparent'
               }`}
             >
-              Llistat d'Assistents (3 Fulls)
+              <FileText className="w-3.5 h-3.5 sm:hidden" />
+              <span>Llistat d'Assistents</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-slate-500 text-[11px]">
+          <div className="hidden sm:flex items-center gap-2 text-slate-500 text-[11px]">
             <span>
               {exportOptions.groupByTables ? 'Agrupació: Taules de 10' : 'Agrupació: Continu'}
             </span>
@@ -874,8 +880,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Minimalist Footer */}
-      <footer className="mt-auto py-4 border-t border-slate-200 bg-white text-center text-xs text-slate-400">
+      {/* Minimalist Footer (Desktop) */}
+      <footer className="mt-auto py-4 border-t border-slate-200 bg-white text-center text-xs text-slate-400 hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
           <span>Luma Dinars — Gestió de comensals i assignació de taules de 10</span>
           <button
@@ -886,6 +892,62 @@ export default function App() {
           </button>
         </div>
       </footer>
+
+      {/* Mobile Fixed Bottom Navigation Bar (Pattern 1 Thumb Zone) */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1 px-3 flex items-center justify-around shadow-lg">
+        <button
+          type="button"
+          onClick={() => setViewTab('tables')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition cursor-pointer min-w-[56px] min-h-[44px] ${
+            viewTab === 'tables'
+              ? 'text-slate-900 font-semibold'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          <span className="text-[10px] tracking-tight mt-0.5">Taules</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setViewTab('sheets')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition cursor-pointer min-w-[56px] min-h-[44px] ${
+            viewTab === 'sheets'
+              ? 'text-slate-900 font-semibold'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span className="text-[10px] tracking-tight mt-0.5">Llistat</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsPrintOpen(true)}
+          className="flex flex-col items-center justify-center py-1 px-3 rounded-lg text-slate-700 hover:text-slate-900 transition cursor-pointer min-w-[56px] min-h-[44px]"
+        >
+          <Printer className="w-4 h-4" />
+          <span className="text-[10px] tracking-tight mt-0.5">PDF</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            saveToServer({ csvText, manualOverrides, tableAssignments }, true);
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition cursor-pointer min-w-[56px] min-h-[44px] relative ${
+            hasPendingChanges ? 'text-blue-600 font-semibold' : 'text-slate-700'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          <span className="text-[10px] tracking-tight mt-0.5">
+            {hasPendingChanges ? 'Desar' : 'BBDD'}
+          </span>
+          {hasPendingChanges && (
+            <span className="absolute top-1.5 right-4 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+          )}
+        </button>
+      </nav>
 
       {/* Custom Export & Columns Modal */}
       <ExportCustomModal
