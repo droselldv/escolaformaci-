@@ -115,7 +115,6 @@ try {
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     stateCache = { ...stateCache, ...parsed };
-    // If parsed csv is older/shorter than the updated INITIAL_LUMA_CSV, prefer the updated one
     if (!stateCache.csvText || stateCache.csvText.length < INITIAL_LUMA_CSV.length) {
       stateCache.csvText = INITIAL_LUMA_CSV;
     }
@@ -123,16 +122,62 @@ try {
       ...DEFAULT_OVERRIDES,
       ...(stateCache.manualOverrides || {}),
     };
-    console.log('Loaded persisted event data from disk.');
+    console.log('[DISK-INIT] Loaded persisted event data from disk.');
   } else {
-    // Write initial seed
     fs.writeFileSync(DATA_FILE, JSON.stringify(stateCache, null, 2), 'utf-8');
     fs.writeFileSync(CSV_FILE, stateCache.csvText, 'utf-8');
-    console.log('Seeded event data file with initial dataset.');
+    console.log('[DISK-INIT] Seeded event data file with initial dataset.');
   }
 } catch (err) {
-  console.warn('Failed reading from data file, using memory cache:', err);
+  console.warn('[DISK-INIT] Failed reading from data file, using memory cache:', err);
 }
+
+// Load initial state from Netlify DB on startup if available
+async function loadFromDbOnInit() {
+  if (!sql) return;
+  try {
+    console.log('[DB-INIT] Checking existing event state in Netlify DB...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS event_state (
+        id TEXT PRIMARY KEY,
+        csv_text TEXT,
+        manual_overrides JSONB,
+        table_assignments JSONB,
+        spreadsheet_id TEXT,
+        spreadsheet_url TEXT,
+        last_synced_at TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+    const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
+    if (rows && rows.length > 0) {
+      const row = rows[0];
+      const dbCsvLen = (row.csv_text || '').length;
+      console.log(`[DB-INIT] Found existing row in Netlify DB (CSV length: ${dbCsvLen}, updated_at: ${row.updated_at})`);
+      stateCache = {
+        csvText: row.csv_text && row.csv_text.length > 50 ? row.csv_text : stateCache.csvText,
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
+        manualOverrides: row.manual_overrides || stateCache.manualOverrides,
+        tableAssignments: row.table_assignments || stateCache.tableAssignments,
+        spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
+        spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
+        lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
+      };
+      persistState();
+    } else {
+      console.log('[DB-INIT] No event_state row found in Netlify DB. Seeding initial row...');
+      await sql`
+        INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, updated_at)
+        VALUES ('default', ${stateCache.csvText}, ${JSON.stringify(stateCache.manualOverrides)}, ${JSON.stringify(stateCache.tableAssignments)}, NOW())
+        ON CONFLICT (id) DO NOTHING;
+      `;
+    }
+  } catch (err) {
+    console.warn('[DB-INIT] Error during initial DB load/creation:', err);
+  }
+}
+
+loadFromDbOnInit();
 
 function persistState() {
   try {
@@ -200,11 +245,13 @@ async function startServer() {
   // GET /api/data - Retrieve persisted attendees list and state
   app.get('/api/data', async (_req, res) => {
     try {
+      console.log('[API GET /api/data] Sol·licitud rebuda de sincronització inicial.');
       if (sql) {
         // Query Netlify Database
         const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
         if (rows && rows.length > 0) {
           const row = rows[0];
+          console.log(`[API GET /api/data] S'han recuperat dades de Netlify DB (updated_at: ${row.updated_at}, len: ${(row.csv_text || '').length})`);
           stateCache = {
             csvText: row.csv_text || stateCache.csvText,
             updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
@@ -214,6 +261,8 @@ async function startServer() {
             spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
             lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
           };
+        } else {
+          console.log('[API GET /api/data] No hi ha files a Netlify DB, retornant memòria/disc.');
         }
       }
       res.json({
@@ -222,10 +271,11 @@ async function startServer() {
         db: sql ? 'Netlify Database' : 'Server disk',
       });
     } catch (e: any) {
-      console.error('Error fetching from DB:', e);
+      console.error('[API GET /api/data] Error consultant la base de dades:', e);
       res.json({
         success: true,
         data: stateCache,
+        db: 'Server disk (DB error fallback)',
       });
     }
   });
@@ -234,6 +284,13 @@ async function startServer() {
   app.post('/api/data', async (req, res) => {
     try {
       const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt } = req.body;
+      const changesList: string[] = [];
+      if (csvText !== undefined) changesList.push(`csvText (${csvText.length} caràcters)`);
+      if (manualOverrides !== undefined) changesList.push(`manualOverrides (${Object.keys(manualOverrides).length} canvis)`);
+      if (tableAssignments !== undefined) changesList.push(`tableAssignments (${Object.keys(tableAssignments).length} assignacions)`);
+      if (spreadsheetId !== undefined) changesList.push('spreadsheetId');
+      
+      console.log(`[API POST /api/data] Desant canvis al servidor: ${changesList.join(', ') || 'sense camps nous'}`);
 
       if (csvText !== undefined) {
         stateCache.csvText = csvText;
@@ -257,6 +314,7 @@ async function startServer() {
       stateCache.updatedAt = new Date().toISOString();
       persistState();
 
+      let dbSaveSuccess = false;
       if (sql) {
         try {
           await sql`
@@ -292,8 +350,10 @@ async function startServer() {
               last_synced_at = EXCLUDED.last_synced_at,
               updated_at = NOW();
           `;
+          dbSaveSuccess = true;
+          console.log('[API POST /api/data] Desat amb èxit a Netlify Database (PostgreSQL)!');
         } catch (dbErr) {
-          console.error('Error writing to Netlify DB:', dbErr);
+          console.error('[API POST /api/data] Error escrivint a Netlify DB:', dbErr);
         }
       }
 
@@ -307,11 +367,11 @@ async function startServer() {
       res.json({
         success: true,
         updatedAt: stateCache.updatedAt,
-        db: sql ? 'Netlify Database' : 'Server disk',
+        db: sql ? (dbSaveSuccess ? 'Netlify Database' : 'Server disk (DB write failed)') : 'Server disk',
         message: 'Dades desades correctament.',
       });
     } catch (error: any) {
-      console.error('Error saving data to server:', error);
+      console.error('[API POST /api/data] Error desant les dades:', error);
       res.status(500).json({
         success: false,
         error: error.message || 'Error desant les dades al servidor.',

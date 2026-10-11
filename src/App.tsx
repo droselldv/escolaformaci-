@@ -35,6 +35,9 @@ import {
   CheckCircle2,
   HardDrive,
   Database,
+  RefreshCw,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function App() {
@@ -124,66 +127,147 @@ export default function App() {
   const [serverStatus, setServerStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
   const [dbType, setDbType] = useState<string>('Netlify DB (PostgreSQL)');
   const [lastServerSaveTime, setLastServerSaveTime] = useState<string>('En sincronia');
+  const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
+  const [lastServerSyncTime, setLastServerSyncTime] = useState<string>('');
   const hasLoadedInitialServerData = useRef(false);
+  const isSavingRef = useRef(false);
 
-  // Load persisted state from server on mount
-  useEffect(() => {
-    let mounted = true;
-    fetch('/api/data')
-      .then(res => res.json())
-      .then(json => {
-        if (!mounted || !json.success || !json.data) {
-          hasLoadedInitialServerData.current = true;
-          return;
-        }
-        if (json.db) {
-          setDbType(json.db);
-        }
+  // Manual reload / sync from server on demand
+  const syncFromServer = async (showNotification = false) => {
+    try {
+      console.log('[CLIENT] Sincronitzant amb el servidor i Netlify DB...');
+      const res = await fetch('/api/data');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        if (json.db) setDbType(json.db);
         const s = json.data;
         if (s.csvText && s.csvText.length > 50) {
           setCsvText(s.csvText);
           localStorage.setItem('luma_event_csv', s.csvText);
         }
-        if (s.manualOverrides) setManualOverrides(s.manualOverrides);
-        if (s.tableAssignments) setTableAssignments(s.tableAssignments);
+        if (s.manualOverrides) {
+          setManualOverrides(s.manualOverrides);
+          localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+        }
+        if (s.tableAssignments) {
+          setTableAssignments(s.tableAssignments);
+          localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+        }
+        setHasPendingChanges(false);
         setServerStatus('synced');
+        const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastServerSyncTime(nowStr);
+        setLastServerSaveTime(nowStr);
+        if (showNotification) {
+          setStatusMsg({
+            type: 'success',
+            text: `Base de dades sincronitzada amb èxit a les ${nowStr}.`,
+          });
+        }
+        console.log('[CLIENT] Dades carregades correctament de la base de dades:', {
+          csvLength: s.csvText?.length,
+          overridesCount: Object.keys(s.manualOverrides || {}).length,
+          assignmentsCount: Object.keys(s.tableAssignments || {}).length,
+        });
+      }
+    } catch (err) {
+      console.warn('[CLIENT] Error al sincronitzar des del servidor:', err);
+      if (showNotification) {
+        setStatusMsg({
+          type: 'error',
+          text: 'No s’ha pogut connectar amb la base de dades per descarregar els canvis.',
+        });
+      }
+    }
+  };
+
+  // 1. Carrega inicial exclusiva quan l'usuari entra a la pàgina
+  useEffect(() => {
+    let mounted = true;
+    console.log('[CLIENT-INIT] Connexió inicial: recuperant estat de Netlify DB...');
+    fetch('/api/data')
+      .then(res => res.json())
+      .then(json => {
+        if (!mounted) return;
+        if (json.success && json.data) {
+          if (json.db) setDbType(json.db);
+          const s = json.data;
+          if (s.csvText && s.csvText.length > 50) {
+            setCsvText(s.csvText);
+            localStorage.setItem('luma_event_csv', s.csvText);
+          }
+          if (s.manualOverrides) {
+            setManualOverrides(s.manualOverrides);
+            localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+          }
+          if (s.tableAssignments) {
+            setTableAssignments(s.tableAssignments);
+            localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+          }
+          const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          setLastServerSyncTime(nowStr);
+          setLastServerSaveTime(nowStr);
+          setServerStatus('synced');
+          setHasPendingChanges(false);
+          console.log('[CLIENT-INIT] Estat inicial carregat amb èxit des de Netlify DB.');
+        }
         hasLoadedInitialServerData.current = true;
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('[CLIENT-INIT] Error carregant dades del servidor a l’inici:', err);
         setServerStatus('synced');
         hasLoadedInitialServerData.current = true;
       });
+
     return () => {
       mounted = false;
     };
   }, []);
 
-  const saveToServer = async (patch: Record<string, any>) => {
+  // Funció per desar canvis a la base de dades
+  const saveToServer = async (patch: Record<string, any>, manualTrigger = false) => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setServerStatus('saving');
+    console.log('[CLIENT-SAVE] Enviant canvis a la base de dades:', Object.keys(patch));
+
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
+
       if (res.ok) {
         const json = await res.json().catch(() => null);
         if (json?.db) setDbType(json.db);
         setServerStatus('synced');
-        setLastServerSaveTime(new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        setHasPendingChanges(false);
+        const timeStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastServerSaveTime(timeStr);
+        console.log('[CLIENT-SAVE] Canvis confirmats i desats a la base de dades a les', timeStr);
+        if (manualTrigger) {
+          setStatusMsg({
+            type: 'success',
+            text: `Tots els canvis s'han enviat i guardat a la base de dades Netlify (PostgreSQL) a les ${timeStr}!`,
+          });
+        }
       } else {
         setServerStatus('offline');
+        console.error('[CLIENT-SAVE] Error retornat pel servidor:', res.status);
       }
-    } catch {
+    } catch (err) {
       setServerStatus('offline');
+      console.error('[CLIENT-SAVE] Error de xarxa en desar a la base de dades:', err);
+    } finally {
+      isSavingRef.current = false;
     }
   };
 
-  // Real-time synchronization across all visitors / users
+  // Reacció en temps real quan un altre usuari desa (SSE push passiu, NO polling)
   useEffect(() => {
     let active = true;
-
-    // 1. Listen for real-time Server-Sent Events (instant push)
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource('/api/events');
@@ -192,6 +276,7 @@ export default function App() {
         try {
           const payload = JSON.parse(e.data);
           if (payload.type === 'update' && payload.data) {
+            // Només actualitzar si no tenim canvis pendents d'enviar per no provocar sobrescriptures
             const s = payload.data;
             if (s.csvText && s.csvText.length > 50) {
               setCsvText(s.csvText);
@@ -207,62 +292,33 @@ export default function App() {
             }
             setServerStatus('synced');
             setLastServerSaveTime('En viu (sincronitzat)');
+            console.log('[CLIENT-SSE] Rebuts canvis externs en temps real.');
           }
         } catch {
           // parse error
         }
       };
-      eventSource.onerror = () => {
-        // Fallback polling will handle it
-      };
     } catch {
       // EventSource not supported
     }
 
-    // 2. Background polling fallback every 4 seconds to guarantee consistency across all devices/tabs
-    const pollInterval = setInterval(() => {
-      if (!active) return;
-      fetch('/api/data')
-        .then(r => r.json())
-        .then(json => {
-          if (!active || !json.success || !json.data) return;
-          const s = json.data;
-          if (s.csvText && s.csvText.length > 50) {
-            setCsvText(prev => (prev !== s.csvText ? s.csvText : prev));
-          }
-          if (s.manualOverrides) {
-            setManualOverrides(prev => {
-              const currentStr = JSON.stringify(prev);
-              const newStr = JSON.stringify(s.manualOverrides);
-              return currentStr !== newStr ? s.manualOverrides : prev;
-            });
-          }
-          if (s.tableAssignments) {
-            setTableAssignments(prev => {
-              const currentStr = JSON.stringify(prev);
-              const newStr = JSON.stringify(s.tableAssignments);
-              return currentStr !== newStr ? s.tableAssignments : prev;
-            });
-          }
-        })
-        .catch(() => {});
-    }, 4000);
-
     return () => {
       active = false;
       if (eventSource) eventSource.close();
-      clearInterval(pollInterval);
     };
   }, []);
+
+  // Enviar canvis automàticament quan es fan modificacions (amb debounce de 800ms)
   useEffect(() => {
     if (!hasLoadedInitialServerData.current) return;
+    setHasPendingChanges(true);
     const timer = setTimeout(() => {
       saveToServer({
         csvText,
         manualOverrides,
         tableAssignments,
       });
-    }, 700);
+    }, 800);
     return () => clearTimeout(timer);
   }, [csvText, manualOverrides, tableAssignments]);
 
@@ -602,20 +658,35 @@ export default function App() {
 
           {/* Quick Header Actions */}
           <div className="flex items-center gap-2">
+            {/* Sync from DB button */}
+            <button
+              type="button"
+              onClick={() => syncFromServer(true)}
+              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Carregar de nou l'estat actual de la base de dades"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${serverStatus === 'saving' ? 'animate-spin' : ''}`} />
+              <span className="hidden lg:inline">Sincronitzar de la BBDD</span>
+            </button>
+
+            {/* Manual Send / Save to DB button */}
             <button
               type="button"
               onClick={() => {
-                saveToServer({ csvText, manualOverrides, tableAssignments });
-                setStatusMsg({
-                  type: 'success',
-                  text: 'Dades desades correctament a la base de dades Netlify (PostgreSQL)!',
-                });
+                saveToServer({ csvText, manualOverrides, tableAssignments }, true);
               }}
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Forçar desat immediat a la base de dades Netlify"
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                hasPendingChanges
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white animate-pulse'
+                  : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+              }`}
+              title="Enviar i desar immediatament tots els canvis a la base de dades Netlify"
             >
-              <Database className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden md:inline">Desar a Netlify DB</span>
+              <Database className="w-3.5 h-3.5" />
+              <span>{hasPendingChanges ? 'Enviar canvis a BBDD' : 'Guardat a la BBDD'}</span>
+              {hasPendingChanges && (
+                <span className="w-2 h-2 rounded-full bg-amber-300"></span>
+              )}
             </button>
 
             <a
