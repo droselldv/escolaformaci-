@@ -4,54 +4,44 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { User } from 'firebase/auth';
-import {
-  initAuth,
-  googleSignIn,
-  getAccessToken,
-  logout,
-} from './lib/firebase';
 import { INITIAL_LUMA_CSV } from './data/initialData';
 import { parseLumaCSV, processGuests } from './lib/csvParser';
 import { downloadExcelFile, DEFAULT_EXPORT_OPTIONS } from './lib/exportExcel';
-import { createOrUpdateGoogleSheet, SyncResult } from './lib/sheetsSync';
-import { ProcessedGuest, CustomExportOptions } from './types';
+import {
+  ProcessedGuest,
+  CustomExportOptions,
+  TableAssignmentsMap,
+} from './types';
 import { OverviewCards } from './components/OverviewCards';
 import { TableCard } from './components/TableCard';
 import { FullTableView } from './components/FullTableView';
-import { ConfirmationModal } from './components/ConfirmationModal';
 import { ImportModal } from './components/ImportModal';
 import { EditGuestModal } from './components/EditGuestModal';
 import { ExportCustomModal } from './components/ExportCustomModal';
 import { PrintModal } from './components/PrintModal';
 import {
-  CloudUpload,
+  TableAssignmentModal,
+  AssignmentModalMode,
+} from './components/TableAssignmentModal';
+import { TableSearchAndUnassigned } from './components/TableSearchAndUnassigned';
+import {
   Download,
   Upload,
-  ExternalLink,
-  LayoutGrid,
-  Sheet,
-  CheckCircle2,
-  AlertCircle,
-  LogOut,
   SlidersHorizontal,
   Printer,
   Sparkles,
-  ArrowUpDown,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function App() {
-  // 1. Google Authentication State
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  // 2. Event & Guests Data State
+  // 1. Event & Guests Data State
   const [csvText, setCsvText] = useState<string>(() => {
     return localStorage.getItem('luma_event_csv') || INITIAL_LUMA_CSV;
   });
 
   const [sortMode, setSortMode] = useState<'chronological' | 'original'>('chronological');
+
+  // Manual dish / stays overrides
   const [manualOverrides, setManualOverrides] = useState<
     Record<string, { stays: boolean; dish: string }>
   >(() => {
@@ -63,7 +53,17 @@ export default function App() {
     }
   });
 
-  // 3. Custom Export & Display Options State
+  // Table & seat assignments state (persisted across sessions and exports)
+  const [tableAssignments, setTableAssignments] = useState<TableAssignmentsMap>(() => {
+    try {
+      const saved = localStorage.getItem('luma_table_assignments');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // 2. Custom Export & Display Options State
   const [exportOptions, setExportOptions] = useState<CustomExportOptions>(() => {
     try {
       const saved = localStorage.getItem('luma_export_options_v4');
@@ -80,26 +80,17 @@ export default function App() {
     }
   });
 
-  // 4. View & Modal States
+  // 3. View, Search & Modal States
   const [viewTab, setViewTab] = useState<'tables' | 'sheets'>('tables');
-  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isCustomExportOpen, setIsCustomExportOpen] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<ProcessedGuest | null>(null);
+  const [tableModalMode, setTableModalMode] = useState<AssignmentModalMode | null>(null);
 
-  // 5. Drive & Sheets sync State
-  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(() => {
-    return localStorage.getItem('luma_drive_spreadsheet_id') || null;
-  });
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState<string | null>(() => {
-    return localStorage.getItem('luma_drive_spreadsheet_url') || null;
-  });
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => {
-    return localStorage.getItem('luma_drive_last_synced') || null;
-  });
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatusMsg, setSyncStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
+  // Status message alert
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
 
@@ -116,13 +107,10 @@ export default function App() {
         const s = json.data;
         if (s.csvText && s.csvText.length > 50) setCsvText(s.csvText);
         if (s.manualOverrides) setManualOverrides(s.manualOverrides);
-        if (s.spreadsheetId) setSpreadsheetId(s.spreadsheetId);
-        if (s.spreadsheetUrl) setSpreadsheetUrl(s.spreadsheetUrl);
-        if (s.lastSyncedAt) setLastSyncedAt(s.lastSyncedAt);
+        if (s.tableAssignments) setTableAssignments(s.tableAssignments);
         setServerStatus('synced');
       })
       .catch(() => {
-        // Fallback to local state if server offline or standalone preview
         setServerStatus('synced');
       });
     return () => {
@@ -148,7 +136,7 @@ export default function App() {
     }
   };
 
-  // Persistence
+  // Local storage persistence
   useEffect(() => {
     localStorage.setItem('luma_event_csv', csvText);
   }, [csvText]);
@@ -158,58 +146,22 @@ export default function App() {
   }, [manualOverrides]);
 
   useEffect(() => {
+    localStorage.setItem('luma_table_assignments', JSON.stringify(tableAssignments));
+  }, [tableAssignments]);
+
+  useEffect(() => {
     localStorage.setItem('luma_export_options_v4', JSON.stringify(exportOptions));
   }, [exportOptions]);
 
-  // Auth listener
-  useEffect(() => {
-    const unsubscribe = initAuth(
-      (currentUser, currentToken) => {
-        setUser(currentUser);
-        setToken(currentToken);
-      },
-      () => {
-        // Not logged in
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  const handleLogin = async () => {
-    setIsLoggingIn(true);
-    try {
-      const res = await googleSignIn();
-      if (res) {
-        setUser(res.user);
-        setToken(res.accessToken);
-      }
-    } catch (err: any) {
-      console.error('Google Sign-in failed:', err);
-      setSyncStatusMsg({
-        type: 'error',
-        text: err.message || "Error en iniciar sessió amb Google.",
-      });
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    setUser(null);
-    setToken(null);
-  };
-
-  // Process raw guests and apply any overrides
+  // Process raw guests and apply manual overrides + table assignments
   const rawGuests = useMemo(() => {
     return parseLumaCSV(csvText);
   }, [csvText]);
 
   const analysis = useMemo(() => {
-    const res = processGuests(rawGuests, sortMode, 10);
-
+    let modifiedRaw = rawGuests;
     if (Object.keys(manualOverrides).length > 0) {
-      const modifiedRaw = rawGuests.map(g => {
+      modifiedRaw = rawGuests.map(g => {
         const override = manualOverrides[g.guest_id];
         if (override) {
           return {
@@ -219,101 +171,154 @@ export default function App() {
         }
         return g;
       });
-      return processGuests(modifiedRaw, sortMode, 10);
     }
 
-    return res;
-  }, [rawGuests, sortMode, manualOverrides]);
+    return processGuests(modifiedRaw, sortMode, 10, tableAssignments);
+  }, [rawGuests, sortMode, manualOverrides, tableAssignments]);
 
-  // Handle Google Drive sync execution
-  const handleTriggerSync = async () => {
-    if (!token) {
-      try {
-        const res = await googleSignIn();
-        if (res) {
-          setUser(res.user);
-          setToken(res.accessToken);
-          setIsConfirmationOpen(true);
+  // ==================== TABLE ASSIGNMENT OPERATIONS ====================
+
+  /**
+   * Move a guest to another table (placing in first free seat of target table or specified seat)
+   */
+  const handleMoveGuest = (
+    guest: ProcessedGuest,
+    targetTableNumber: number,
+    targetSeatNumber?: number
+  ) => {
+    // Find target table to see occupied seats
+    const targetTableObj = analysis.tables.find(t => t.tableNumber === targetTableNumber);
+    let seatNum = targetSeatNumber;
+    if (!seatNum) {
+      if (targetTableObj) {
+        const occupiedSeats = new Set(targetTableObj.guests.map(g => g.seatNumber));
+        for (let s = 1; s <= targetTableObj.capacity; s++) {
+          if (!occupiedSeats.has(s)) {
+            seatNum = s;
+            break;
+          }
         }
-      } catch {
-        setSyncStatusMsg({
-          type: 'error',
-          text: "Cal iniciar sessió amb Google per poder sincronitzar amb Google Drive.",
-        });
+        if (!seatNum) seatNum = targetTableObj.guests.length + 1;
+      } else {
+        seatNum = 1;
       }
-      return;
     }
-    setIsConfirmationOpen(true);
+
+    const nextAssignments: TableAssignmentsMap = {
+      ...tableAssignments,
+      [guest.guest_id]: {
+        tableNumber: targetTableNumber,
+        seatNumber: seatNum,
+      },
+    };
+
+    setTableAssignments(nextAssignments);
+    saveToServer({ tableAssignments: nextAssignments });
+    setStatusMsg({
+      type: 'success',
+      text: `${guest.first_name || guest.name} s'ha mogut a la Taula ${targetTableNumber} (Seient #${seatNum}).`,
+    });
   };
 
-  const handleExecuteDriveSync = async () => {
-    const currentToken = token || (await getAccessToken());
-    if (!currentToken) {
-      setIsConfirmationOpen(false);
-      handleLogin();
-      return;
-    }
+  /**
+   * Swap two guests between tables / seats
+   */
+  const handleSwapGuests = (guestA: ProcessedGuest, guestB: ProcessedGuest) => {
+    const nextAssignments: TableAssignmentsMap = {
+      ...tableAssignments,
+      [guestA.guest_id]: {
+        tableNumber: guestB.tableNumber ?? null,
+        seatNumber: guestB.seatNumber ?? null,
+      },
+      [guestB.guest_id]: {
+        tableNumber: guestA.tableNumber ?? null,
+        seatNumber: guestA.seatNumber ?? null,
+      },
+    };
 
-    setIsSyncing(true);
-    setSyncStatusMsg(null);
+    setTableAssignments(nextAssignments);
+    saveToServer({ tableAssignments: nextAssignments });
+    setStatusMsg({
+      type: 'success',
+      text: `S'han intercanviat els seients de ${guestA.first_name || guestA.name} i ${guestB.first_name || guestB.name}.`,
+    });
+  };
 
-    try {
-      const result: SyncResult = await createOrUpdateGoogleSheet(
-        currentToken,
-        spreadsheetId,
-        analysis,
-        'Luma Event - Dinars, Taules i Plats',
-        exportOptions
-      );
+  /**
+   * Unassign a guest from their table (moves them to unassigned list)
+   */
+  const handleUnassignGuest = (guest: ProcessedGuest) => {
+    const nextAssignments: TableAssignmentsMap = {
+      ...tableAssignments,
+      [guest.guest_id]: {
+        tableNumber: null,
+        seatNumber: null,
+      },
+    };
 
-      setSpreadsheetId(result.spreadsheetId);
-      setSpreadsheetUrl(result.spreadsheetUrl);
-      const now = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
-      setLastSyncedAt(now);
+    setTableAssignments(nextAssignments);
+    saveToServer({ tableAssignments: nextAssignments });
+    setStatusMsg({
+      type: 'success',
+      text: `${guest.first_name || guest.name} s'ha tret de la taula (ara no té taula assignada).`,
+    });
+  };
 
-      localStorage.setItem('luma_drive_spreadsheet_id', result.spreadsheetId);
-      localStorage.setItem('luma_drive_spreadsheet_url', result.spreadsheetUrl);
-      localStorage.setItem('luma_drive_last_synced', now);
+  /**
+   * Assign a guest directly to a specific table & seat
+   */
+  const handleAssignToSeat = (
+    guest: ProcessedGuest,
+    tableNumber: number,
+    seatNumber?: number
+  ) => {
+    handleMoveGuest(guest, tableNumber, seatNumber);
+  };
 
-      saveToServer({
-        spreadsheetId: result.spreadsheetId,
-        spreadsheetUrl: result.spreadsheetUrl,
-        lastSyncedAt: now,
-      });
+  /**
+   * Create a new table
+   */
+  const handleCreateNewTable = () => {
+    const maxTable = analysis.tables.length > 0 ? Math.max(...analysis.tables.map(t => t.tableNumber)) : 0;
+    const newTableNumber = maxTable + 1;
 
-      setSyncStatusMsg({
+    // If there is an unassigned guest, assign first unassigned guest to seat 1 of the new table
+    if (analysis.unassignedGuests.length > 0) {
+      const firstUnassigned = analysis.unassignedGuests[0];
+      handleMoveGuest(firstUnassigned, newTableNumber, 1);
+      setStatusMsg({
         type: 'success',
-        text: result.isNew
-          ? 'Creat amb èxit el nou Google Sheet al teu Google Drive amb els 3 fulls i columnes triades!'
-          : 'Sincronitzat i actualitzat amb èxit el Google Sheet al teu Google Drive!',
+        text: `Creada nova Taula ${newTableNumber} i assignat ${firstUnassigned.first_name || firstUnassigned.name} al Seient #1.`,
       });
-      setIsConfirmationOpen(false);
-    } catch (err: any) {
-      console.error('Error syncing to Drive:', err);
-      setSyncStatusMsg({
-        type: 'error',
-        text: err.message || "Error al sincronitzar amb Google Drive. Verifica els permisos.",
+    } else {
+      // Open modal to assign a guest to this new table
+      setStatusMsg({
+        type: 'success',
+        text: `Pots afegir comensals a la nova Taula ${newTableNumber} fent clic a "+ Afegir comensal".`,
       });
-      setIsConfirmationOpen(false);
-    } finally {
-      setIsSyncing(false);
+      setTableModalMode({
+        type: 'add_to_seat',
+        tableNumber: newTableNumber,
+        seatNumber: 1,
+      });
     }
   };
 
+  // Export Local Excel
   const handleExportLocalExcel = () => {
     downloadExcelFile(analysis, 'Luma_Esdeveniment_Dinars_Taules.xlsx', exportOptions);
   };
 
+  // Import New CSV (preserves existing table assignments)
   const handleImportNewCSV = (newCsv: string) => {
     setCsvText(newCsv);
-    setManualOverrides({});
     saveToServer({
       csvText: newCsv,
-      manualOverrides: {},
+      tableAssignments,
     });
-    setSyncStatusMsg({
+    setStatusMsg({
       type: 'success',
-      text: 'Nou informe de Luma desat al servidor i taules recalculades amb èxit!',
+      text: 'Nou informe de Luma carregat i desat amb èxit. Els canvis de taules s’han mantingut!',
     });
   };
 
@@ -346,8 +351,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col antialiased selection:bg-blue-500/10 selection:text-blue-900">
-      {/* Top Header - Minimalist & Polished */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30">
+      {/* Top Header - Clean, Minimalist Enterprise */}
+      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
           {/* Logo & Title */}
           <div className="flex items-center gap-2.5">
@@ -370,7 +375,11 @@ export default function App() {
                       ? 'bg-amber-50 text-amber-700'
                       : 'bg-emerald-50 text-emerald-700'
                   }`}
-                  title={serverStatus === 'saving' ? 'Desant canvis al servidor...' : 'Dades sincronitzades amb el servidor'}
+                  title={
+                    serverStatus === 'saving'
+                      ? 'Desant canvis al servidor...'
+                      : 'Dades sincronitzades amb el servidor'
+                  }
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${
@@ -387,56 +396,16 @@ export default function App() {
             </div>
           </div>
 
-          {/* User & Cloud State */}
-          <div className="flex items-center gap-2.5">
-            {spreadsheetUrl && (
-              <a
-                href={spreadsheetUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60 px-2.5 py-1 rounded-lg transition"
-              >
-                <Sheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Google Sheet al Drive</span>
-                <ExternalLink className="w-3 h-3 opacity-60" />
-              </a>
-            )}
-
-            {user ? (
-              <div className="flex items-center gap-2 bg-slate-100/70 rounded-lg p-1 pr-2.5 border border-slate-200/60 text-xs">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || 'Usuari'}
-                    className="w-5 h-5 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold text-[10px] flex items-center justify-center">
-                    {user.email?.[0].toUpperCase() || 'U'}
-                  </div>
-                )}
-                <span className="font-medium text-slate-700 max-w-[120px] truncate hidden md:inline text-[11px]">
-                  {user.displayName || user.email}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
-                  title="Tancar sessió de Google"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleLogin}
-                disabled={isLoggingIn}
-                className="text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <CloudUpload className="w-3.5 h-3.5 text-blue-600" />
-                <span>{isLoggingIn ? 'Connectant...' : 'Connectar Drive'}</span>
-              </button>
-            )}
+          {/* Quick Header Action */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsPrintOpen(true)}
+              className="text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg px-3 py-1.5 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Descarregar o imprimir llistat en PDF net"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Descarregar / Imprimir PDF</span>
+            </button>
           </div>
         </div>
       </header>
@@ -444,16 +413,14 @@ export default function App() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex-1 space-y-4 w-full">
         {/* Status Alert if any */}
-        {syncStatusMsg && (
-          <div
-            className="p-3 rounded-lg border border-slate-200 bg-white shadow-2xs flex items-center justify-between gap-3 text-xs"
-          >
+        {statusMsg && (
+          <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-2xs flex items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-800">
               <span className="w-1.5 h-1.5 rounded-full bg-slate-900" />
-              <span>{syncStatusMsg.text}</span>
+              <span>{statusMsg.text}</span>
             </div>
             <button
-              onClick={() => setSyncStatusMsg(null)}
+              onClick={() => setStatusMsg(null)}
               className="text-slate-400 hover:text-slate-600 font-bold px-1 cursor-pointer"
             >
               ✕
@@ -469,9 +436,7 @@ export default function App() {
               {analysis.totalLunch} comensals
             </span>
             <span className="text-slate-300">·</span>
-            <span>
-              {analysis.totalTables} taules de 10
-            </span>
+            <span>{analysis.totalTables} taules de 10</span>
             <span className="text-slate-300 hidden sm:inline">·</span>
             <span className="text-slate-500 hidden sm:inline">
               Ordre: {exportOptions.sortBy === 'alpha_name' ? 'Alfabètic per nom' : exportOptions.sortBy === 'alpha_lastname' ? 'Alfabètic per cognom' : 'Per taula'}
@@ -498,14 +463,14 @@ export default function App() {
               <span>Descarregar Excel</span>
             </button>
 
+            {/* Prominent black download button (replaces drive button as requested) */}
             <button
-              onClick={handleTriggerSync}
-              disabled={isSyncing}
-              className="px-3.5 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              title="Sincronitzar directament al Google Drive"
+              onClick={() => setIsPrintOpen(true)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Descarregar o imprimir llistat en format PDF net i ordenat"
             >
-              <CloudUpload className="w-3.5 h-3.5" />
-              <span>{spreadsheetId ? 'Actualitzar al Drive' : 'Sincronitzar a Drive'}</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>Descarregar / Imprimir PDF</span>
             </button>
 
             <button
@@ -515,14 +480,6 @@ export default function App() {
             >
               <Upload className="w-3.5 h-3.5 text-slate-500" />
               <span className="hidden sm:inline">Nou Informe</span>
-            </button>
-
-            <button
-              onClick={() => setIsPrintOpen(true)}
-              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
-              title="Imprimir / Vista PDF"
-            >
-              <Printer className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -557,24 +514,48 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-            {lastSyncedAt && (
-              <span>Drive: {lastSyncedAt}</span>
-            )}
-            <span className="text-slate-300">·</span>
-            <span>{exportOptions.groupByTables ? 'Agrupació: Taules de 10' : 'Agrupació: Continu'}</span>
+            <span>
+              {exportOptions.groupByTables ? 'Agrupació: Taules de 10' : 'Agrupació: Continu'}
+            </span>
           </div>
         </div>
 
-        {/* Tab 1: Cards of Tables */}
+        {/* Tab 1: Cards of Tables & Search & Unassigned Guests */}
         {viewTab === 'tables' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-            {analysis.tables.map(table => (
-              <TableCard
-                key={table.tableNumber}
-                table={table}
-                onEditGuest={guest => setEditingGuest(guest)}
-              />
-            ))}
+          <div className="space-y-4">
+            {/* Search and unassigned guests management panel */}
+            <TableSearchAndUnassigned
+              allLunchGuests={analysis.lunchGuests}
+              unassignedGuests={analysis.unassignedGuests}
+              tables={analysis.tables}
+              searchQuery={tableSearchQuery}
+              onSearchChange={setTableSearchQuery}
+              onOpenMove={guest => setTableModalMode({ type: 'move', guest })}
+              onOpenSwap={guest => setTableModalMode({ type: 'swap', guest })}
+              onUnassignGuest={handleUnassignGuest}
+              onOpenAssignUnassigned={guest =>
+                setTableModalMode({ type: 'assign_unassigned', guest })
+              }
+              onCreateNewTable={handleCreateNewTable}
+            />
+
+            {/* Grid of Tables */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              {analysis.tables.map(table => (
+                <TableCard
+                  key={table.tableNumber}
+                  table={table}
+                  searchQuery={tableSearchQuery}
+                  onEditGuest={guest => setEditingGuest(guest)}
+                  onOpenMove={guest => setTableModalMode({ type: 'move', guest })}
+                  onOpenSwap={guest => setTableModalMode({ type: 'swap', guest })}
+                  onUnassignGuest={handleUnassignGuest}
+                  onOpenAddToSeat={(tableNumber, seatNumber) =>
+                    setTableModalMode({ type: 'add_to_seat', tableNumber, seatNumber })
+                  }
+                />
+              ))}
+            </div>
           </div>
         )}
 
@@ -594,7 +575,7 @@ export default function App() {
       {/* Minimalist Footer */}
       <footer className="mt-auto py-4 border-t border-slate-200 bg-white text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
-          <span>Luma Dinars — Agrupació en taules de 10 i integració Google Drive</span>
+          <span>Luma Dinars — Gestió de comensals i assignació de taules de 10</span>
           <button
             onClick={() => setIsCustomExportOpen(true)}
             className="text-blue-600 hover:underline cursor-pointer"
@@ -604,19 +585,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Confirmation Modal (MANDATORY for Drive Mutation) */}
-      <ConfirmationModal
-        isOpen={isConfirmationOpen}
-        onClose={() => setIsConfirmationOpen(false)}
-        onConfirm={handleExecuteDriveSync}
-        isLoading={isSyncing}
-        isExisting={!!spreadsheetId}
-        totalGuests={analysis.totalRegistered}
-        lunchGuests={analysis.totalLunch}
-        tableCount={analysis.totalTables}
-        spreadsheetTitle="Luma Event - Dinars, Taules i Plats"
-      />
-
       {/* Custom Export & Columns Modal */}
       <ExportCustomModal
         isOpen={isCustomExportOpen}
@@ -624,12 +592,10 @@ export default function App() {
         options={exportOptions}
         onChangeOptions={setExportOptions}
         onExportExcel={handleExportLocalExcel}
-        onSyncDrive={handleTriggerSync}
         onPrint={() => {
           setIsCustomExportOpen(false);
           setIsPrintOpen(true);
         }}
-        isDriveSyncing={isSyncing}
       />
 
       {/* Print View Modal */}
@@ -638,6 +604,20 @@ export default function App() {
         onClose={() => setIsPrintOpen(false)}
         analysis={analysis}
         options={exportOptions}
+      />
+
+      {/* Table Assignment & Move/Swap Modal */}
+      <TableAssignmentModal
+        isOpen={tableModalMode !== null}
+        onClose={() => setTableModalMode(null)}
+        mode={tableModalMode}
+        tables={analysis.tables}
+        allLunchGuests={analysis.lunchGuests}
+        unassignedGuests={analysis.unassignedGuests}
+        onMoveGuest={handleMoveGuest}
+        onSwapGuests={handleSwapGuests}
+        onAssignToSeat={handleAssignToSeat}
+        onUnassignGuest={handleUnassignGuest}
       />
 
       {/* Import CSV Modal */}

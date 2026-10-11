@@ -1,4 +1,11 @@
-import { RawLumaGuest, ProcessedGuest, EventAnalysis, TableGroup, DishTotal } from '../types';
+import {
+  RawLumaGuest,
+  ProcessedGuest,
+  EventAnalysis,
+  TableGroup,
+  DishTotal,
+  TableAssignmentsMap,
+} from '../types';
 
 /**
  * Robust CSV parser that handles quotes, escaped quotes, and multiline values.
@@ -220,7 +227,8 @@ export function determineLunchStatus(rawDish: string, ticketName: string): { sta
 export function processGuests(
   rawGuests: RawLumaGuest[],
   sortMode: 'chronological' | 'original' = 'chronological',
-  tableSize = 10
+  tableSize = 10,
+  tableAssignments: TableAssignmentsMap = {}
 ): EventAnalysis {
   // Clone array
   let sorted = [...rawGuests];
@@ -256,34 +264,132 @@ export function processGuests(
     }
   });
 
-  // Assign tables of 10 for lunch guests
-  const tables: TableGroup[] = [];
-  const totalLunch = lunchGuests.length;
-  const numTables = Math.ceil(totalLunch / tableSize) || 0;
+  // Helper to find assignment by guest_id, email, or name
+  const getAssignment = (g: ProcessedGuest) => {
+    if (tableAssignments[g.guest_id] !== undefined) return tableAssignments[g.guest_id];
+    if (g.email && tableAssignments[g.email] !== undefined) return tableAssignments[g.email];
+    if (g.name && tableAssignments[g.name] !== undefined) return tableAssignments[g.name];
+    return undefined;
+  };
 
-  for (let t = 0; t < numTables; t++) {
-    const tableNum = t + 1;
-    const startIdx = t * tableSize;
-    const endIdx = Math.min(startIdx + tableSize, totalLunch);
-    const tableMembers = lunchGuests.slice(startIdx, endIdx);
+  const hasAnyAssignments = Object.keys(tableAssignments).length > 0;
+
+  // Track assignments: tableNumber -> array of length tableSize with seats 0..9 (seatNumbers 1..10)
+  const assignedByTable: Map<number, (ProcessedGuest | null)[]> = new Map();
+  const unassignedGuests: ProcessedGuest[] = [];
+  const unassignedQueue: ProcessedGuest[] = [];
+
+  if (hasAnyAssignments) {
+    // 1. Process guests with explicit assignments
+    lunchGuests.forEach(g => {
+      const assignment = getAssignment(g);
+      if (assignment) {
+        if (assignment.tableNumber === null) {
+          // Explicitly unassigned
+          g.tableNumber = undefined;
+          g.seatNumber = undefined;
+          unassignedGuests.push(g);
+        } else if (typeof assignment.tableNumber === 'number' && assignment.tableNumber > 0) {
+          g.tableNumber = assignment.tableNumber;
+          g.seatNumber = assignment.seatNumber ?? undefined;
+
+          if (!assignedByTable.has(g.tableNumber)) {
+            assignedByTable.set(g.tableNumber, new Array(tableSize).fill(null));
+          }
+          const tableSeats = assignedByTable.get(g.tableNumber)!;
+          if (
+            g.seatNumber &&
+            g.seatNumber >= 1 &&
+            g.seatNumber <= tableSize &&
+            tableSeats[g.seatNumber - 1] === null
+          ) {
+            tableSeats[g.seatNumber - 1] = g;
+          } else {
+            // Find first free seat in this table
+            const freeIdx = tableSeats.findIndex(s => s === null);
+            if (freeIdx !== -1) {
+              tableSeats[freeIdx] = g;
+              g.seatNumber = freeIdx + 1;
+            } else {
+              tableSeats.push(g);
+              g.seatNumber = tableSeats.length;
+            }
+          }
+        }
+      } else {
+        // No explicit assignment for this guest
+        unassignedQueue.push(g);
+      }
+    });
+
+    // 2. Place any unassignedQueue guests into empty seats of existing tables or next tables
+    unassignedQueue.forEach(g => {
+      let placed = false;
+      const sortedTableNums = Array.from(assignedByTable.keys()).sort((a, b) => a - b);
+      for (const tableNum of sortedTableNums) {
+        const seats = assignedByTable.get(tableNum)!;
+        const freeIdx = seats.findIndex(s => s === null);
+        if (freeIdx !== -1) {
+          seats[freeIdx] = g;
+          g.tableNumber = tableNum;
+          g.seatNumber = freeIdx + 1;
+          placed = true;
+          break;
+        }
+      }
+
+      if (!placed) {
+        const nextTableNum =
+          assignedByTable.size > 0 ? Math.max(...Array.from(assignedByTable.keys())) + 1 : 1;
+        const newSeats = new Array(tableSize).fill(null);
+        newSeats[0] = g;
+        g.tableNumber = nextTableNum;
+        g.seatNumber = 1;
+        assignedByTable.set(nextTableNum, newSeats);
+      }
+    });
+  } else {
+    // Default assignment: group into tables of 10
+    const totalLunch = lunchGuests.length;
+    const numTables = Math.ceil(totalLunch / tableSize) || 0;
+
+    for (let t = 0; t < numTables; t++) {
+      const tableNum = t + 1;
+      const startIdx = t * tableSize;
+      const endIdx = Math.min(startIdx + tableSize, totalLunch);
+      const tableMembers = lunchGuests.slice(startIdx, endIdx);
+      const seats = new Array(tableSize).fill(null);
+
+      tableMembers.forEach((g, seatIdx) => {
+        g.tableNumber = tableNum;
+        g.seatNumber = seatIdx + 1;
+        seats[seatIdx] = g;
+      });
+
+      assignedByTable.set(tableNum, seats);
+    }
+  }
+
+  // Build final TableGroup array
+  const tableNumbers = Array.from(assignedByTable.keys()).sort((a, b) => a - b);
+  const tables: TableGroup[] = tableNumbers.map(tableNum => {
+    const rawSeats = assignedByTable.get(tableNum) || [];
+    const tableGuests = rawSeats.filter((g): g is ProcessedGuest => g !== null);
 
     const dishCounts: Record<string, number> = {};
-
-    tableMembers.forEach((g, seatIdx) => {
-      g.tableNumber = tableNum;
-      g.seatNumber = seatIdx + 1;
+    tableGuests.forEach(g => {
       dishCounts[g.cleanDish] = (dishCounts[g.cleanDish] || 0) + 1;
     });
 
-    tables.push({
+    return {
       tableNumber: tableNum,
-      capacity: tableSize,
-      guests: tableMembers,
+      capacity: Math.max(tableSize, rawSeats.length),
+      guests: tableGuests,
       dishCounts,
-    });
-  }
+    };
+  });
 
-  // Calculate overall dish totals
+  // Overall dish totals
   const dishCountsMap: Record<string, number> = {};
   lunchGuests.forEach(g => {
     dishCountsMap[g.cleanDish] = (dishCountsMap[g.cleanDish] || 0) + 1;
@@ -292,16 +398,16 @@ export function processGuests(
   const dishTotals: DishTotal[] = Object.entries(dishCountsMap).map(([dish, count]) => ({
     dish,
     count,
-    percentage: totalLunch > 0 ? Math.round((count / totalLunch) * 1000) / 10 : 0,
+    percentage: lunchGuests.length > 0 ? Math.round((count / lunchGuests.length) * 1000) / 10 : 0,
   }));
 
-  // Sort dishes by count descending
   dishTotals.sort((a, b) => b.count - a.count);
 
   return {
     allGuests: processedAll,
     lunchGuests,
     noLunchGuests,
+    unassignedGuests,
     tables,
     dishTotals,
     totalRegistered: rawGuests.length,

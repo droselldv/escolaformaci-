@@ -30,8 +30,14 @@ function getColumnValue(g: ProcessedGuest, colId: AvailableColumnId): React.Reac
       return <span className="font-semibold text-slate-900">{formatFullNameSurnamesFirst(g)}</span>;
     case 'table':
       return (
-        <span className="font-medium text-slate-800 whitespace-nowrap">
-          {g.tableNumber ? `Taula ${g.tableNumber}` : '-'}
+        <span className="whitespace-nowrap">
+          {g.tableNumber ? (
+            <span className="font-medium text-slate-800">Taula {g.tableNumber}</span>
+          ) : (
+            <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded text-[11px] border border-amber-200/60">
+              Sense taula
+            </span>
+          )}
         </span>
       );
     case 'seat':

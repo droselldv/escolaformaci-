@@ -9,7 +9,6 @@ import {
 import {
   X,
   FileSpreadsheet,
-  CloudUpload,
   Printer,
   Check,
 } from 'lucide-react';
@@ -20,9 +19,7 @@ interface ExportCustomModalProps {
   options: CustomExportOptions;
   onChangeOptions: (newOpts: CustomExportOptions) => void;
   onExportExcel: () => void;
-  onSyncDrive: () => void;
   onPrint: () => void;
-  isDriveSyncing: boolean;
 }
 
 export const ExportCustomModal: React.FC<ExportCustomModalProps> = ({
@@ -31,9 +28,7 @@ export const ExportCustomModal: React.FC<ExportCustomModalProps> = ({
   options,
   onChangeOptions,
   onExportExcel,
-  onSyncDrive,
   onPrint,
-  isDriveSyncing,
 }) => {
   if (!isOpen) return null;
 
@@ -271,30 +266,21 @@ export const ExportCustomModal: React.FC<ExportCustomModalProps> = ({
         {/* Modal Actions Footer */}
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
           <button
-            onClick={onPrint}
+            onClick={onClose}
             type="button"
-            className="px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+            className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 rounded transition cursor-pointer"
           >
-            <Printer className="w-3.5 h-3.5 text-slate-500" />
-            <span>Imprimir / PDF</span>
+            Tancar
           </button>
 
           <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={onClose}
-              type="button"
-              className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 rounded transition cursor-pointer"
-            >
-              Tancar
-            </button>
-
             <button
               onClick={() => {
                 onExportExcel();
                 onClose();
               }}
               type="button"
-              className="px-3 py-1.5 text-xs font-medium text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 rounded transition flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 text-xs font-medium text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 rounded transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
               <span>Descarregar Excel</span>
@@ -303,14 +289,13 @@ export const ExportCustomModal: React.FC<ExportCustomModalProps> = ({
             <button
               onClick={() => {
                 onClose();
-                onSyncDrive();
+                onPrint();
               }}
-              disabled={isDriveSyncing}
               type="button"
-              className="px-3.5 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
-              <CloudUpload className="w-3.5 h-3.5" />
-              <span>Sincronitzar a Drive</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>Descarregar / Imprimir PDF</span>
             </button>
           </div>
         </div>

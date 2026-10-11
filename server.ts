@@ -26,6 +26,7 @@ let stateCache = {
   csvText: INITIAL_LUMA_CSV,
   updatedAt: new Date().toISOString(),
   manualOverrides: {} as Record<string, any>,
+  tableAssignments: {} as Record<string, { tableNumber: number | null; seatNumber?: number | null }>,
   spreadsheetId: null as string | null,
   spreadsheetUrl: null as string | null,
   lastSyncedAt: null as string | null,
@@ -84,13 +85,16 @@ async function startServer() {
   // POST /api/data - Update attendees list or changes
   app.post('/api/data', (req, res) => {
     try {
-      const { csvText, manualOverrides, spreadsheetId, spreadsheetUrl, lastSyncedAt } = req.body;
+      const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt } = req.body;
 
       if (csvText !== undefined) {
         stateCache.csvText = csvText;
       }
       if (manualOverrides !== undefined) {
         stateCache.manualOverrides = manualOverrides;
+      }
+      if (tableAssignments !== undefined) {
+        stateCache.tableAssignments = tableAssignments;
       }
       if (spreadsheetId !== undefined) {
         stateCache.spreadsheetId = spreadsheetId;
@@ -125,6 +129,7 @@ async function startServer() {
       csvText: INITIAL_LUMA_CSV,
       updatedAt: new Date().toISOString(),
       manualOverrides: {},
+      tableAssignments: {},
       spreadsheetId: null,
       spreadsheetUrl: null,
       lastSyncedAt: null,

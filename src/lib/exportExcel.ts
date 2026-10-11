@@ -14,7 +14,7 @@ export const DEFAULT_EXPORT_OPTIONS: CustomExportOptions = {
 function getGuestColumnValue(g: ProcessedGuest, col: AvailableColumnId): string | number {
   switch (col) {
     case 'table':
-      return g.tableNumber ? `Taula ${g.tableNumber}` : '-';
+      return g.tableNumber ? `Taula ${g.tableNumber}` : 'Sense taula';
     case 'seat':
       return g.seatNumber ?? '-';
     case 'name':

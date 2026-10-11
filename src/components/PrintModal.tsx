@@ -15,7 +15,7 @@ function getPrintColumnValue(g: any, colId: AvailableColumnId): string {
     case 'name':
       return formatFullNameSurnamesFirst(g);
     case 'table':
-      return g.tableNumber ? `Taula ${g.tableNumber}` : '-';
+      return g.tableNumber ? `Taula ${g.tableNumber}` : 'Sense taula';
     case 'seat':
       return g.seatNumber ? `#${g.seatNumber}` : '-';
     case 'first_name':
@@ -234,6 +234,48 @@ export const PrintModal: React.FC<PrintModalProps> = ({
                     </div>
                   );
                 })}
+
+                {/* Unassigned Guests Table if any */}
+                {analysis.unassignedGuests.length > 0 && (
+                  <div className="border border-amber-300 rounded-md overflow-hidden print-table-group-card mb-5">
+                    <div className="bg-amber-50 px-4 py-2 font-bold text-sm sm:text-base flex justify-between items-center border-b border-amber-200 text-slate-900">
+                      <span>Assistents Sense Taula Assignada ({analysis.unassignedGuests.length} comensals)</span>
+                      <span className="text-xs font-semibold text-amber-800">
+                        Pendents d'assignar taula
+                      </span>
+                    </div>
+
+                    <table className={`print-table w-full text-left ${isExtraLargeText ? 'text-base' : 'text-sm'}`}>
+                      <thead>
+                        <tr className="border-b-2 border-slate-900 bg-slate-50 font-bold text-slate-800 uppercase tracking-wider text-xs">
+                          {activeCols.map(colId => (
+                            <th key={colId} className="py-2.5 px-3.5">
+                              {colDefMap.get(colId)?.label || colId}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {analysis.unassignedGuests.map(g => (
+                          <tr key={g.guest_id} className="hover:bg-slate-50/50">
+                            {activeCols.map(colId => (
+                              <td
+                                key={colId}
+                                className={`py-2 px-3.5 ${
+                                  colId === 'name'
+                                    ? 'font-bold text-slate-950 text-sm sm:text-base'
+                                    : 'text-slate-800'
+                                }`}
+                              >
+                                {getPrintColumnValue(g, colId)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             ) : (
               /* Continuous Flat Table (Paginated naturally across pages 2, 3...) */

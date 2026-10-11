@@ -8,6 +8,7 @@ let memoryState = {
   csvText: INITIAL_LUMA_CSV,
   updatedAt: new Date().toISOString(),
   manualOverrides: {},
+  tableAssignments: {},
   spreadsheetId: null,
   spreadsheetUrl: null,
   lastSyncedAt: null,
@@ -50,10 +51,11 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const { csvText, manualOverrides, spreadsheetId, spreadsheetUrl, lastSyncedAt } = body;
+      const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt } = body;
 
       if (csvText !== undefined) memoryState.csvText = csvText;
       if (manualOverrides !== undefined) memoryState.manualOverrides = manualOverrides;
+      if (tableAssignments !== undefined) memoryState.tableAssignments = tableAssignments;
       if (spreadsheetId !== undefined) memoryState.spreadsheetId = spreadsheetId;
       if (spreadsheetUrl !== undefined) memoryState.spreadsheetUrl = spreadsheetUrl;
       if (lastSyncedAt !== undefined) memoryState.lastSyncedAt = lastSyncedAt;

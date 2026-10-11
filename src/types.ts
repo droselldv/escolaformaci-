@@ -36,10 +36,18 @@ export interface TableGroup {
   dishCounts: Record<string, number>;
 }
 
+export interface TableAssignment {
+  tableNumber: number | null; // null indicates unassigned
+  seatNumber?: number | null;
+}
+
+export type TableAssignmentsMap = Record<string, TableAssignment>;
+
 export interface EventAnalysis {
   allGuests: ProcessedGuest[];
   lunchGuests: ProcessedGuest[];
   noLunchGuests: ProcessedGuest[];
+  unassignedGuests: ProcessedGuest[];
   tables: TableGroup[];
   dishTotals: DishTotal[];
   totalRegistered: number;
