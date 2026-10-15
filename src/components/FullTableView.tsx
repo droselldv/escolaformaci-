@@ -43,15 +43,22 @@ function getColumnValue(
       );
     case 'table':
       return (
-        <span className="whitespace-nowrap">
+        <button
+          type="button"
+          onClick={() => onEditGuest?.(g)}
+          className="whitespace-nowrap text-left cursor-pointer group inline-flex items-center gap-1"
+          title="Clic per canviar la taula d'aquest comensal"
+        >
           {g.tableNumber ? (
-            <span className="font-medium text-slate-800">Taula {g.tableNumber}</span>
+            <span className="font-semibold text-blue-700 group-hover:text-blue-900 group-hover:underline">
+              Taula {g.tableNumber}
+            </span>
           ) : (
-            <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded text-[11px] border border-amber-200/60">
+            <span className="text-amber-700 font-medium bg-amber-50 group-hover:bg-amber-100 px-1.5 py-0.5 rounded text-[11px] border border-amber-200/60">
               Sense taula
             </span>
           )}
-        </span>
+        </button>
       );
     case 'seat':
       return <span className="font-mono text-slate-500">{g.seatNumber ?? '-'}</span>;
@@ -288,6 +295,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                   <option value="all">Tots els plats</option>
                   <option value="carn">Carn - Cap de llom</option>
                   <option value="peix">Peix - Orada</option>
+                  <option value="vegetari">Vegetarià / Vegà</option>
                 </select>
               </>
             )}
@@ -519,6 +527,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                     <th className="py-2 px-3 text-center">Comensals</th>
                     <th className="py-2 px-3">Carn (Cap de llom)</th>
                     <th className="py-2 px-3">Peix (Orada)</th>
+                    <th className="py-2 px-3">Vegetarià / Vegà</th>
                     <th className="py-2 px-3">Llista d'assistents</th>
                   </tr>
                 </thead>
@@ -526,12 +535,18 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                   {analysis.tables.map(t => {
                     const carn = t.dishCounts['Carn - Cap de llom'] || 0;
                     const peix = t.dishCounts['Peix - Orada'] || 0;
+                    const vege =
+                      t.dishCounts['Vegetarià / Vegà'] ||
+                      Object.entries(t.dishCounts)
+                        .filter(([d]) => d.toLowerCase().includes('vegetari') || d.toLowerCase().includes('vegà'))
+                        .reduce((sum, [, c]) => sum + c, 0);
                     return (
                       <tr key={t.tableNumber}>
                         <td className="py-2 px-3 font-semibold text-slate-900">Taula {t.tableNumber}</td>
                         <td className="py-2 px-3 text-center font-medium">{t.guests.length} / 10</td>
                         <td className="py-2 px-3 text-slate-800">{carn}</td>
                         <td className="py-2 px-3 text-slate-800">{peix}</td>
+                        <td className="py-2 px-3 text-emerald-800 font-medium">{vege}</td>
                         <td className="py-2 px-3 text-slate-500 truncate max-w-sm">
                           {t.guests.map(g => g.name).join(', ')}
                         </td>

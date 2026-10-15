@@ -4,19 +4,32 @@ import { X, Check, MapPin, Mail, Phone, Calendar } from 'lucide-react';
 
 interface EditGuestModalProps {
   guest: ProcessedGuest | null;
+  tables?: { tableNumber: number; capacity: number; guests: ProcessedGuest[] }[];
   onClose: () => void;
-  onSave: (guestId: string, staysForLunch: boolean, dish: string, name?: string) => void;
+  onSave: (
+    guestId: string,
+    staysForLunch: boolean,
+    dish: string,
+    name?: string,
+    tableNumber?: number | null,
+    seatNumber?: number | null
+  ) => void;
 }
 
-export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, onSave }) => {
+export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, tables = [], onClose, onSave }) => {
   if (!guest) return null;
 
   const [name, setName] = useState(guest.name);
   const [stays, setStays] = useState(guest.staysForLunch);
   const [dish, setDish] = useState(guest.cleanDish);
+  const [tableNum, setTableNum] = useState<number | null>(guest.tableNumber ?? null);
+  const [seatNum, setSeatNum] = useState<number | null>(guest.seatNumber ?? null);
+
+  const maxTableNum = tables.length > 0 ? Math.max(...tables.map(t => t.tableNumber)) : 0;
+  const nextNewTableNum = maxTableNum + 1;
 
   const handleSave = () => {
-    onSave(guest.guest_id, stays, dish, name.trim());
+    onSave(guest.guest_id, stays, dish, name.trim(), stays ? tableNum : null, stays ? seatNum : null);
     onClose();
   };
 
@@ -149,6 +162,81 @@ export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, onClose, 
                   />
                   <span className="font-medium text-slate-900">Peix - Orada</span>
                 </label>
+
+                <label className="flex items-center gap-2.5 p-2 rounded border border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dish"
+                    value="Vegetarià / Vegà"
+                    checked={dish === 'Vegetarià / Vegà'}
+                    onChange={() => setDish('Vegetarià / Vegà')}
+                    className="text-emerald-700 focus:ring-emerald-500"
+                  />
+                  <span className="font-medium text-emerald-900 flex items-center gap-1.5">
+                    <span>Vegetarià / Vegà</span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full font-semibold">Verd</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Table & Seat Assignment */}
+          {stays && (
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="font-semibold text-slate-800 block">
+                Assignació de Taula i Seient
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] text-slate-500 block mb-1">
+                    Taula
+                  </label>
+                  <select
+                    value={tableNum === null ? 'none' : tableNum}
+                    onChange={e => {
+                      if (e.target.value === 'none') {
+                        setTableNum(null);
+                        setSeatNum(null);
+                      } else {
+                        setTableNum(Number(e.target.value));
+                      }
+                    }}
+                    className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:bg-white"
+                  >
+                    <option value="none">Sense taula (pendent d'assignar)</option>
+                    {tables.map(t => (
+                      <option key={t.tableNumber} value={t.tableNumber}>
+                        Taula {t.tableNumber} ({t.guests.length}/{t.capacity} ocupats)
+                      </option>
+                    ))}
+                    <option value={nextNewTableNum}>+ Nova Taula {nextNewTableNum}</option>
+                  </select>
+                </div>
+
+                {tableNum !== null && (
+                  <div>
+                    <label className="text-[11px] text-slate-500 block mb-1">
+                      Seient a la Taula {tableNum}
+                    </label>
+                    <select
+                      value={seatNum ?? ''}
+                      onChange={e => setSeatNum(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:bg-white"
+                    >
+                      <option value="">Automàtic (primer lliure)</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => {
+                        const targetT = tables.find(t => t.tableNumber === tableNum);
+                        const occ = targetT?.guests.find(g => g.seatNumber === s && g.guest_id !== guest.guest_id);
+                        return (
+                          <option key={s} value={s}>
+                            Seient #{s} {occ ? `(Ocupat: ${occ.name.split(' ')[0]})` : '(Lliure)'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           )}

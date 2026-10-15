@@ -36,10 +36,15 @@ export const TableCard: React.FC<TableCardProps> = ({
 
   const carnCount = table.dishCounts['Carn - Cap de llom'] || 0;
   const peixCount = table.dishCounts['Peix - Orada'] || 0;
+  const vegeCount =
+    table.dishCounts['Vegetarià / Vegà'] ||
+    Object.entries(table.dishCounts)
+      .filter(([d]) => d.toLowerCase().includes('vegetari') || d.toLowerCase().includes('vegà'))
+      .reduce((sum, [, count]) => sum + count, 0);
 
   const handleCopyList = () => {
     const text = [
-      `Taula ${table.tableNumber} (${table.guests.length}/${table.capacity} comensals) - Carn: ${carnCount}, Peix: ${peixCount}`,
+      `Taula ${table.tableNumber} (${table.guests.length}/${table.capacity} comensals) - Carn: ${carnCount}, Peix: ${peixCount}${vegeCount > 0 ? `, Vegà: ${vegeCount}` : ''}`,
       ...table.guests.map(
         g =>
           `${g.seatNumber || '-'}. ${formatFullNameSurnamesFirst(g)} - ${g.cleanDish} (${
@@ -121,6 +126,9 @@ export const TableCard: React.FC<TableCardProps> = ({
           <div className="text-[11px] text-slate-500 flex items-center gap-1.5 hidden sm:flex">
             <span>C: <strong>{carnCount}</strong></span>
             <span>P: <strong>{peixCount}</strong></span>
+            {vegeCount > 0 && (
+              <span className="text-emerald-700 font-semibold bg-emerald-50 px-1 rounded">V: <strong>{vegeCount}</strong></span>
+            )}
           </div>
 
           <button
@@ -210,8 +218,20 @@ export const TableCard: React.FC<TableCardProps> = ({
 
           {/* Dish tag and quick actions */}
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[11px] text-slate-600 font-medium whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded text-[10px]">
-                  {guest.cleanDish.includes('Carn')
+                <span
+                  className={`font-medium whitespace-nowrap px-2 py-0.5 rounded text-[10px] ${
+                    guest.cleanDish.toLowerCase().includes('vegetari') || guest.cleanDish.toLowerCase().includes('vegà')
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-semibold'
+                      : guest.cleanDish.includes('Carn')
+                      ? 'bg-slate-100 text-slate-700'
+                      : guest.cleanDish.includes('Peix')
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {guest.cleanDish.toLowerCase().includes('vegetari') || guest.cleanDish.toLowerCase().includes('vegà')
+                    ? 'Vegà / Veg.'
+                    : guest.cleanDish.includes('Carn')
                     ? 'Carn'
                     : guest.cleanDish.includes('Peix')
                     ? 'Peix'

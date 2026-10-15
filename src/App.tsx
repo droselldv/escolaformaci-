@@ -133,6 +133,7 @@ export default function App() {
   const [lastServerSyncTime, setLastServerSyncTime] = useState<string>('');
   const hasLoadedInitialServerData = useRef(false);
   const isSavingRef = useRef(false);
+  const pendingSavePatchRef = useRef<Record<string, any> | null>(null);
 
   // Manual reload / sync from server on demand
   const syncFromServer = async (showNotification = false) => {
@@ -227,9 +228,12 @@ export default function App() {
     };
   }, []);
 
-  // Funció per desar canvis a la base de dades
+  // Funció per desar canvis a la base de dades amb cua per evitar pèrdues de canvis
   const saveToServer = async (patch: Record<string, any>, manualTrigger = false) => {
-    if (isSavingRef.current) return;
+    if (isSavingRef.current) {
+      pendingSavePatchRef.current = { ...(pendingSavePatchRef.current || {}), ...patch };
+      return;
+    }
     isSavingRef.current = true;
     setServerStatus('saving');
     console.log('[CLIENT-SAVE] Enviant canvis a la base de dades:', Object.keys(patch));
@@ -264,6 +268,11 @@ export default function App() {
       console.error('[CLIENT-SAVE] Error de xarxa en desar a la base de dades:', err);
     } finally {
       isSavingRef.current = false;
+      if (pendingSavePatchRef.current) {
+        const nextPatch = pendingSavePatchRef.current;
+        pendingSavePatchRef.current = null;
+        saveToServer(nextPatch, false);
+      }
     }
   };
 
@@ -425,7 +434,7 @@ export default function App() {
     };
 
     setTableAssignments(nextAssignments);
-    saveToServer({ tableAssignments: nextAssignments });
+    saveToServer({ csvText, manualOverrides, tableAssignments: nextAssignments });
     setStatusMsg({
       type: 'success',
       text: `${guest.first_name || guest.name} s'ha mogut a la Taula ${targetTableNumber} (Seient #${seatNum}).`,
@@ -449,7 +458,7 @@ export default function App() {
     };
 
     setTableAssignments(nextAssignments);
-    saveToServer({ tableAssignments: nextAssignments });
+    saveToServer({ csvText, manualOverrides, tableAssignments: nextAssignments });
     setStatusMsg({
       type: 'success',
       text: `S'han intercanviat els seients de ${guestA.first_name || guestA.name} i ${guestB.first_name || guestB.name}.`,
@@ -469,7 +478,7 @@ export default function App() {
     };
 
     setTableAssignments(nextAssignments);
-    saveToServer({ tableAssignments: nextAssignments });
+    saveToServer({ csvText, manualOverrides, tableAssignments: nextAssignments });
     setStatusMsg({
       type: 'success',
       text: `${guest.first_name || guest.name} s'ha tret de la taula (ara no té taula assignada).`,
@@ -485,6 +494,26 @@ export default function App() {
     seatNumber?: number
   ) => {
     handleMoveGuest(guest, tableNumber, seatNumber);
+  };
+
+  /**
+   * Reset all tables back to initial chronological layout
+   */
+  const handleResetTables = async () => {
+    if (!window.confirm("Vols restablir totes les taules a la distribució inicial? Es mantindran tots els canvis de noms i plats.")) {
+      return;
+    }
+    setTableAssignments({});
+    try {
+      await fetch('/api/reset-tables', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    saveToServer({ csvText, manualOverrides, tableAssignments: {} }, true);
+    setStatusMsg({
+      type: 'success',
+      text: "Les taules s'han restablert a la distribució cronològica inicial de 10 en 10.",
+    });
   };
 
   /**
@@ -526,6 +555,7 @@ export default function App() {
     setCsvText(newCsv);
     saveToServer({
       csvText: newCsv,
+      manualOverrides,
       tableAssignments,
     });
     setStatusMsg({
@@ -547,14 +577,16 @@ export default function App() {
       },
     };
     setManualOverrides(nextOverrides);
-    saveToServer({ manualOverrides: nextOverrides });
+    saveToServer({ csvText, manualOverrides: nextOverrides, tableAssignments });
   };
 
   const handleSaveGuestEdit = (
     guestId: string,
     stays: boolean,
     dish: string,
-    newName?: string
+    newName?: string,
+    targetTableNumber?: number | null,
+    targetSeatNumber?: number | null
   ) => {
     const currentGuest = analysis.allGuests.find(g => g.guest_id === guestId);
     const finalName = newName !== undefined && newName.trim() ? newName.trim() : (currentGuest?.name || '');
@@ -602,8 +634,21 @@ export default function App() {
       nextOverrides[currentGuest.name] = updatedOverride;
     }
 
+    const nextAssignments: TableAssignmentsMap = { ...tableAssignments };
+    if (targetTableNumber !== undefined) {
+      if (targetTableNumber === null) {
+        nextAssignments[guestId] = { tableNumber: null, seatNumber: null };
+      } else if (typeof targetTableNumber === 'number' && targetTableNumber > 0) {
+        nextAssignments[guestId] = {
+          tableNumber: targetTableNumber,
+          seatNumber: targetSeatNumber ?? null,
+        };
+      }
+    }
+
     setManualOverrides(nextOverrides);
-    saveToServer({ manualOverrides: nextOverrides });
+    setTableAssignments(nextAssignments);
+    saveToServer({ csvText, manualOverrides: nextOverrides, tableAssignments: nextAssignments });
     setStatusMsg({
       type: 'success',
       text: `S'han desat els canvis per a ${finalName || currentGuest?.name}.`,
@@ -844,6 +889,7 @@ export default function App() {
                 setTableModalMode({ type: 'assign_unassigned', guest })
               }
               onCreateNewTable={handleCreateNewTable}
+              onResetTables={handleResetTables}
               onEditGuest={guest => setEditingGuest(guest)}
             />
 
@@ -994,6 +1040,7 @@ export default function App() {
       {/* Edit Guest Modal */}
       <EditGuestModal
         guest={editingGuest}
+        tables={analysis.tables}
         onClose={() => setEditingGuest(null)}
         onSave={handleSaveGuestEdit}
       />

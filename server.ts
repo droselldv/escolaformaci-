@@ -132,6 +132,29 @@ try {
   console.warn('[DISK-INIT] Failed reading from data file, using memory cache:', err);
 }
 
+function sanitizeTableAssignments(raw: any): Record<string, { tableNumber: number | null; seatNumber?: number | null }> {
+  if (!raw || typeof raw !== 'object') return {};
+  const clean: Record<string, { tableNumber: number | null; seatNumber?: number | null }> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v && typeof v === 'object') {
+      const assignment = v as any;
+      if (assignment.tableNumber === null) {
+        clean[k] = { tableNumber: null, seatNumber: null };
+      } else if (
+        typeof assignment.tableNumber === 'number' &&
+        assignment.tableNumber > 0 &&
+        assignment.tableNumber <= 30
+      ) {
+        clean[k] = {
+          tableNumber: assignment.tableNumber,
+          seatNumber: typeof assignment.seatNumber === 'number' ? assignment.seatNumber : null,
+        };
+      }
+    }
+  }
+  return clean;
+}
+
 // Load initial state from Netlify DB on startup if available
 async function loadFromDbOnInit() {
   if (!sql) return;
@@ -154,11 +177,12 @@ async function loadFromDbOnInit() {
       const row = rows[0];
       const dbCsvLen = (row.csv_text || '').length;
       console.log(`[DB-INIT] Found existing row in Netlify DB (CSV length: ${dbCsvLen}, updated_at: ${row.updated_at})`);
+      const sanitizedAssignments = sanitizeTableAssignments(row.table_assignments);
       stateCache = {
         csvText: row.csv_text && row.csv_text.length > 50 ? row.csv_text : stateCache.csvText,
         updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
         manualOverrides: row.manual_overrides || stateCache.manualOverrides,
-        tableAssignments: row.table_assignments || stateCache.tableAssignments,
+        tableAssignments: sanitizedAssignments,
         spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
         spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
         lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
@@ -299,7 +323,7 @@ async function startServer() {
         stateCache.manualOverrides = manualOverrides;
       }
       if (tableAssignments !== undefined) {
-        stateCache.tableAssignments = tableAssignments;
+        stateCache.tableAssignments = sanitizeTableAssignments(tableAssignments);
       }
       if (spreadsheetId !== undefined) {
         stateCache.spreadsheetId = spreadsheetId;
@@ -429,6 +453,37 @@ async function startServer() {
       });
     } catch (e: any) {
       res.json({ success: false, error: e.message });
+    }
+  });
+
+  // POST /api/reset-tables - Reset only table assignments back to default chronological tables
+  app.post('/api/reset-tables', async (_req, res) => {
+    try {
+      console.log('[API POST /api/reset-tables] Restablint taules per defecte.');
+      stateCache.tableAssignments = {};
+      stateCache.updatedAt = new Date().toISOString();
+      persistState();
+      if (sql) {
+        try {
+          await sql`
+            UPDATE event_state SET table_assignments = '{}'::jsonb, updated_at = NOW() WHERE id = 'default';
+          `;
+        } catch (dbErr) {
+          console.warn('[API reset-tables] Error actualitzant Netlify DB:', dbErr);
+        }
+      }
+      notifyAllClients({
+        type: 'update',
+        updatedAt: stateCache.updatedAt,
+        data: stateCache,
+      });
+      res.json({
+        success: true,
+        data: stateCache,
+        message: 'Assignacions de taules restablertes a l’ordre original correctament.',
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 

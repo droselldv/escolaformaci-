@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Eye,
   Plus,
+  RotateCcw,
 } from 'lucide-react';
 
 interface TableSearchAndUnassignedProps {
@@ -25,6 +26,7 @@ interface TableSearchAndUnassignedProps {
   onUnassignGuest: (guest: ProcessedGuest) => void;
   onOpenAssignUnassigned: (guest: ProcessedGuest) => void;
   onCreateNewTable: () => void;
+  onResetTables?: () => void;
   onEditGuest?: (guest: ProcessedGuest) => void;
 }
 
@@ -39,6 +41,7 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
   onUnassignGuest,
   onOpenAssignUnassigned,
   onCreateNewTable,
+  onResetTables,
   onEditGuest,
 }) => {
   const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true);
@@ -119,6 +122,18 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
             <Plus className="w-4 h-4 text-slate-500" />
             <span>+ Nova Taula</span>
           </button>
+
+          {onResetTables && (
+            <button
+              type="button"
+              onClick={onResetTables}
+              className="px-2.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-800 font-medium text-xs flex items-center gap-1 transition cursor-pointer min-h-[38px] sm:min-h-0"
+              title="Restablir les taules a l'ordre per defecte"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Restablir</span>
+            </button>
+          )}
         </div>
       </div>
 

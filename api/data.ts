@@ -139,7 +139,22 @@ export default async function handler(req: any, res: any) {
 
       if (csvText !== undefined) memoryState.csvText = csvText;
       if (manualOverrides !== undefined) memoryState.manualOverrides = manualOverrides;
-      if (tableAssignments !== undefined) memoryState.tableAssignments = tableAssignments;
+      if (tableAssignments !== undefined) {
+        const clean: Record<string, any> = {};
+        if (tableAssignments && typeof tableAssignments === 'object') {
+          for (const [k, v] of Object.entries(tableAssignments)) {
+            if (v && typeof v === 'object') {
+              const a = v as any;
+              if (a.tableNumber === null) {
+                clean[k] = { tableNumber: null, seatNumber: null };
+              } else if (typeof a.tableNumber === 'number' && a.tableNumber > 0 && a.tableNumber <= 30) {
+                clean[k] = { tableNumber: a.tableNumber, seatNumber: typeof a.seatNumber === 'number' ? a.seatNumber : null };
+              }
+            }
+          }
+        }
+        memoryState.tableAssignments = clean;
+      }
       if (spreadsheetId !== undefined) memoryState.spreadsheetId = spreadsheetId;
       if (spreadsheetUrl !== undefined) memoryState.spreadsheetUrl = spreadsheetUrl;
       if (lastSyncedAt !== undefined) memoryState.lastSyncedAt = lastSyncedAt;

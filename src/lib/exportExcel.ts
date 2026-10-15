@@ -157,6 +157,7 @@ export function generateExcelWorkbook(
       'Total Comensals',
       'Carn - Cap de llom',
       'Peix - Orada',
+      'Vegetarià / Vegà',
       'Altres / Sense especificar',
       'Llista de Comensals a la Taula',
     ]);
@@ -164,8 +165,13 @@ export function generateExcelWorkbook(
     analysis.tables.forEach(t => {
       const carn = t.dishCounts['Carn - Cap de llom'] || 0;
       const peix = t.dishCounts['Peix - Orada'] || 0;
+      const vege =
+        t.dishCounts['Vegetarià / Vegà'] ||
+        Object.entries(t.dishCounts)
+          .filter(([d]) => d.toLowerCase().includes('vegetari') || d.toLowerCase().includes('vegà'))
+          .reduce((sum, [, c]) => sum + c, 0);
       const total = t.guests.length;
-      const altres = Math.max(0, total - (carn + peix));
+      const altres = Math.max(0, total - (carn + peix + vege));
       const guestNames = t.guests.map(g => `${g.name} (${g.cleanDish})`).join('; ');
 
       sheet3Data.push([
@@ -173,6 +179,7 @@ export function generateExcelWorkbook(
         total,
         carn,
         peix,
+        vege,
         altres,
         guestNames,
       ]);

@@ -35,9 +35,30 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
   onUnassignGuest,
 }) => {
   const [targetTable, setTargetTable] = useState<number>(1);
+  const [selectedTargetSeat, setSelectedTargetSeat] = useState<number | undefined>(undefined);
   const [selectedSwapGuestId, setSelectedSwapGuestId] = useState<string>('');
   const [selectedAddGuestId, setSelectedAddGuestId] = useState<string>('');
   const [guestSearchFilter, setGuestSearchFilter] = useState<string>('');
+
+  // Automatically select a valid target table when modal opens
+  React.useEffect(() => {
+    if (!mode || !isOpen) return;
+    setSelectedTargetSeat(undefined);
+    setGuestSearchFilter('');
+    setSelectedSwapGuestId('');
+    setSelectedAddGuestId('');
+
+    if (mode.type === 'move') {
+      const current = mode.guest.tableNumber;
+      // Prefer table that has free seats and isn't current
+      const tableWithSpace = tables.find(t => t.tableNumber !== current && t.guests.length < t.capacity);
+      const fallbackTable = tables.find(t => t.tableNumber !== current);
+      setTargetTable(tableWithSpace ? tableWithSpace.tableNumber : fallbackTable ? fallbackTable.tableNumber : 1);
+    } else if (mode.type === 'assign_unassigned') {
+      const tableWithSpace = tables.find(t => t.guests.length < t.capacity);
+      setTargetTable(tableWithSpace ? tableWithSpace.tableNumber : 1);
+    }
+  }, [mode, isOpen, tables]);
 
   if (!isOpen || !mode) return null;
 
@@ -48,7 +69,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
   // Handle Mode Actions
   const handleConfirmMove = () => {
     if (mode.type === 'move') {
-      onMoveGuest(mode.guest, targetTable);
+      onMoveGuest(mode.guest, targetTable, selectedTargetSeat);
       onClose();
     }
   };
@@ -75,7 +96,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
 
   const handleConfirmAssignUnassigned = () => {
     if (mode.type === 'assign_unassigned') {
-      onAssignToSeat(mode.guest, targetTable);
+      onAssignToSeat(mode.guest, targetTable, selectedTargetSeat);
       onClose();
     }
   };
@@ -193,6 +214,31 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                     </span>
                   </button>
                 </div>
+
+                {/* Optional Seat Selector in Move Mode */}
+                {targetTable <= maxTableNum && (
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <label className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                      Seient a la Taula {targetTable}:
+                    </label>
+                    <select
+                      value={selectedTargetSeat ?? ''}
+                      onChange={e => setSelectedTargetSeat(e.target.value ? Number(e.target.value) : undefined)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium"
+                    >
+                      <option value="">Primer seient lliure disponible (Recomanat)</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => {
+                        const targetTableObj = tables.find(t => t.tableNumber === targetTable);
+                        const occ = targetTableObj?.guests.find(g => g.seatNumber === s);
+                        return (
+                          <option key={s} value={s}>
+                            Seient #{s} {occ ? `(Ocupat per ${formatFullNameSurnamesFirst(occ)})` : '(Lliure)'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
@@ -472,6 +518,31 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                     </span>
                   </button>
                 </div>
+
+                {/* Optional Seat Selector in Assign Mode */}
+                {targetTable <= maxTableNum && (
+                  <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/80">
+                    <label className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                      Seient a la Taula {targetTable}:
+                    </label>
+                    <select
+                      value={selectedTargetSeat ?? ''}
+                      onChange={e => setSelectedTargetSeat(e.target.value ? Number(e.target.value) : undefined)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium"
+                    >
+                      <option value="">Primer seient lliure disponible (Recomanat)</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => {
+                        const targetTableObj = tables.find(t => t.tableNumber === targetTable);
+                        const occ = targetTableObj?.guests.find(g => g.seatNumber === s);
+                        return (
+                          <option key={s} value={s}>
+                            Seient #{s} {occ ? `(Ocupat per ${formatFullNameSurnamesFirst(occ)})` : '(Lliure)'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">

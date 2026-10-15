@@ -215,6 +215,9 @@ export function determineLunchStatus(rawDish: string, ticketName: string): { sta
   }
 
   // Explicit dishes
+  if (lowerDish.includes('vegetari') || lowerDish.includes('vegà') || lowerDish.includes('vegan')) {
+    return { stays: true, cleanDish: 'Vegetarià / Vegà' };
+  }
   if (lowerDish.includes('carn') || lowerDish.includes('llom')) {
     return { stays: true, cleanDish: 'Carn - Cap de llom' };
   }
@@ -284,102 +287,130 @@ export function processGuests(
     return undefined;
   };
 
-  const hasAnyAssignments = Object.keys(tableAssignments).length > 0;
-
-  // Track assignments: tableNumber -> array of length tableSize with seats 0..9 (seatNumbers 1..10)
-  const assignedByTable: Map<number, (ProcessedGuest | null)[]> = new Map();
   const unassignedGuests: ProcessedGuest[] = [];
-  const unassignedQueue: ProcessedGuest[] = [];
 
-  if (hasAnyAssignments) {
-    // 1. Process guests with explicit assignments
-    lunchGuests.forEach(g => {
-      const assignment = getAssignment(g);
-      if (assignment) {
-        if (assignment.tableNumber === null) {
-          // Explicitly unassigned
-          g.tableNumber = undefined;
-          g.seatNumber = undefined;
-          unassignedGuests.push(g);
-        } else if (typeof assignment.tableNumber === 'number' && assignment.tableNumber > 0) {
-          g.tableNumber = assignment.tableNumber;
-          g.seatNumber = assignment.seatNumber ?? undefined;
+  // Minimum tables needed based on total lunch attendees
+  const baseTablesNeeded = Math.max(1, Math.ceil(lunchGuests.length / tableSize));
 
-          if (!assignedByTable.has(g.tableNumber)) {
-            assignedByTable.set(g.tableNumber, new Array(tableSize).fill(null));
-          }
-          const tableSeats = assignedByTable.get(g.tableNumber)!;
-          if (
-            g.seatNumber &&
-            g.seatNumber >= 1 &&
-            g.seatNumber <= tableSize &&
-            tableSeats[g.seatNumber - 1] === null
-          ) {
-            tableSeats[g.seatNumber - 1] = g;
-          } else {
-            // Find first free seat in this table
-            const freeIdx = tableSeats.findIndex(s => s === null);
-            if (freeIdx !== -1) {
-              tableSeats[freeIdx] = g;
-              g.seatNumber = freeIdx + 1;
-            } else {
-              tableSeats.push(g);
-              g.seatNumber = tableSeats.length;
-            }
-          }
-        }
-      } else {
-        // No explicit assignment for this guest
-        unassignedQueue.push(g);
-      }
-    });
+  // Determine target table and target seat for each guest
+  interface TableCandidate {
+    guest: ProcessedGuest;
+    targetTable: number;
+    preferredSeat?: number;
+    isExplicit: boolean;
+  }
 
-    // 2. Place any unassignedQueue guests into empty seats of existing tables or next tables
-    unassignedQueue.forEach(g => {
-      let placed = false;
-      const sortedTableNums = Array.from(assignedByTable.keys()).sort((a, b) => a - b);
-      for (const tableNum of sortedTableNums) {
-        const seats = assignedByTable.get(tableNum)!;
-        const freeIdx = seats.findIndex(s => s === null);
-        if (freeIdx !== -1) {
-          seats[freeIdx] = g;
-          g.tableNumber = tableNum;
-          g.seatNumber = freeIdx + 1;
-          placed = true;
-          break;
-        }
-      }
+  const tableCandidatesMap = new Map<number, TableCandidate[]>();
 
-      if (!placed) {
-        const nextTableNum =
-          assignedByTable.size > 0 ? Math.max(...Array.from(assignedByTable.keys())) + 1 : 1;
-        const newSeats = new Array(tableSize).fill(null);
-        newSeats[0] = g;
-        g.tableNumber = nextTableNum;
-        g.seatNumber = 1;
-        assignedByTable.set(nextTableNum, newSeats);
-      }
-    });
-  } else {
-    // Default assignment: group into tables of 10
-    const totalLunch = lunchGuests.length;
-    const numTables = Math.ceil(totalLunch / tableSize) || 0;
+  lunchGuests.forEach((g, idx) => {
+    const assignment = getAssignment(g);
 
-    for (let t = 0; t < numTables; t++) {
-      const tableNum = t + 1;
-      const startIdx = t * tableSize;
-      const endIdx = Math.min(startIdx + tableSize, totalLunch);
-      const tableMembers = lunchGuests.slice(startIdx, endIdx);
-      const seats = new Array(tableSize).fill(null);
-
-      tableMembers.forEach((g, seatIdx) => {
-        g.tableNumber = tableNum;
-        g.seatNumber = seatIdx + 1;
-        seats[seatIdx] = g;
-      });
-
-      assignedByTable.set(tableNum, seats);
+    if (assignment && assignment.tableNumber === null) {
+      // Explicitly unassigned by user
+      g.tableNumber = undefined;
+      g.seatNumber = undefined;
+      unassignedGuests.push(g);
+      return;
     }
+
+    let targetTable: number;
+    let preferredSeat: number | undefined = undefined;
+    let isExplicit = false;
+
+    if (
+      assignment &&
+      typeof assignment.tableNumber === 'number' &&
+      assignment.tableNumber > 0 &&
+      assignment.tableNumber <= 30
+    ) {
+      targetTable = assignment.tableNumber;
+      if (typeof assignment.seatNumber === 'number' && assignment.seatNumber >= 1) {
+        preferredSeat = assignment.seatNumber;
+      }
+      isExplicit = true;
+    } else {
+      // Baseline default assignment based on chronological index
+      targetTable = Math.floor(idx / tableSize) + 1;
+      preferredSeat = (idx % tableSize) + 1;
+      isExplicit = false;
+    }
+
+    if (!tableCandidatesMap.has(targetTable)) {
+      tableCandidatesMap.set(targetTable, []);
+    }
+    tableCandidatesMap.get(targetTable)!.push({
+      guest: g,
+      targetTable,
+      preferredSeat,
+      isExplicit,
+    });
+  });
+
+  // Calculate highest table number
+  const candidateKeys = Array.from(tableCandidatesMap.keys());
+  const maxTableNum = candidateKeys.length > 0
+    ? Math.max(baseTablesNeeded, ...candidateKeys)
+    : baseTablesNeeded;
+
+  const assignedByTable: Map<number, (ProcessedGuest | null)[]> = new Map();
+
+  // Populate tables 1 to maxTableNum (ensuring contiguous tables without missing cards)
+  for (let t = 1; t <= maxTableNum; t++) {
+    const seats: (ProcessedGuest | null)[] = new Array(tableSize).fill(null);
+    const candidates = tableCandidatesMap.get(t) || [];
+    const unplaced: TableCandidate[] = [];
+
+    // Pass 1: Place explicit assignments with preferred seat within 1..tableSize
+    candidates.forEach(c => {
+      if (
+        c.isExplicit &&
+        c.preferredSeat &&
+        c.preferredSeat >= 1 &&
+        c.preferredSeat <= tableSize &&
+        seats[c.preferredSeat - 1] === null
+      ) {
+        seats[c.preferredSeat - 1] = c.guest;
+      } else {
+        unplaced.push(c);
+      }
+    });
+
+    // Pass 2: Place baseline (non-explicit) assignments with preferred seat within 1..tableSize
+    const stillUnplaced: TableCandidate[] = [];
+    unplaced.forEach(c => {
+      if (
+        !c.isExplicit &&
+        c.preferredSeat &&
+        c.preferredSeat >= 1 &&
+        c.preferredSeat <= tableSize &&
+        seats[c.preferredSeat - 1] === null
+      ) {
+        seats[c.preferredSeat - 1] = c.guest;
+      } else {
+        stillUnplaced.push(c);
+      }
+    });
+
+    // Pass 3: Place remaining candidates into first available null seats in this table
+    stillUnplaced.forEach(c => {
+      const freeIdx = seats.findIndex(s => s === null);
+      if (freeIdx !== -1) {
+        seats[freeIdx] = c.guest;
+      } else {
+        // Table exceeds tableSize capacity, expand table
+        seats.push(c.guest);
+      }
+    });
+
+    // Assign final tableNumber and seatNumber to each seated guest
+    seats.forEach((g, seatIdx) => {
+      if (g) {
+        g.tableNumber = t;
+        g.seatNumber = seatIdx + 1;
+      }
+    });
+
+    assignedByTable.set(t, seats);
   }
 
   // Build final TableGroup array

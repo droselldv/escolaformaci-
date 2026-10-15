@@ -72,6 +72,10 @@ export const PrintModal: React.FC<PrintModalProps> = ({
 
   const carnCount = analysis.dishTotals.find(d => d.dish.includes('Carn'))?.count || 0;
   const peixCount = analysis.dishTotals.find(d => d.dish.includes('Peix'))?.count || 0;
+  const vegeCount =
+    analysis.dishTotals.find(
+      d => d.dish.toLowerCase().includes('vegetari') || d.dish.toLowerCase().includes('vegà')
+    )?.count || 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs print-modal-backdrop">
@@ -178,6 +182,9 @@ export const PrintModal: React.FC<PrintModalProps> = ({
               <div className="text-right text-xs text-slate-700 space-y-1">
                 <p className="font-semibold text-slate-900">
                   Cap de llom (Carn): <span className="underline">{carnCount}</span> · Orada (Peix): <span className="underline">{peixCount}</span>
+                  {vegeCount > 0 && (
+                    <> · Vegetarià / Vegà: <span className="underline text-emerald-800 font-bold">{vegeCount}</span></>
+                  )}
                 </p>
                 <p className="text-slate-500 font-medium">
                   {groupByTables
@@ -198,6 +205,11 @@ export const PrintModal: React.FC<PrintModalProps> = ({
                 {analysis.tables.map(table => {
                   const tableCarn = table.dishCounts['Carn - Cap de llom'] || 0;
                   const tablePeix = table.dishCounts['Peix - Orada'] || 0;
+                  const tableVege =
+                    table.dishCounts['Vegetarià / Vegà'] ||
+                    Object.entries(table.dishCounts)
+                      .filter(([d]) => d.toLowerCase().includes('vegetari') || d.toLowerCase().includes('vegà'))
+                      .reduce((sum, [, c]) => sum + c, 0);
 
                   return (
                     <div
@@ -208,6 +220,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({
                         <span>Taula {table.tableNumber} ({table.guests.length} / 10 comensals)</span>
                         <span className="text-xs font-semibold text-slate-700">
                           Carn: {tableCarn} · Peix: {tablePeix}
+                          {tableVege > 0 && ` · Vegà: ${tableVege}`}
                         </span>
                       </div>
 
