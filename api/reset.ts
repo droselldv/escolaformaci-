@@ -1,4 +1,4 @@
-import { getSql } from './_db';
+import { getSupabase } from './_db';
 import { INITIAL_LUMA_CSV } from '../src/data/initialData';
 
 const DEFAULT_OVERRIDES = {
@@ -33,23 +33,15 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const sql = getSql();
-    if (sql) {
-      await sql`
-        INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, updated_at)
-        VALUES (
-          'default',
-          ${INITIAL_LUMA_CSV},
-          ${JSON.stringify(DEFAULT_OVERRIDES)},
-          '{}'::jsonb,
-          NOW()
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          csv_text = EXCLUDED.csv_text,
-          manual_overrides = EXCLUDED.manual_overrides,
-          table_assignments = EXCLUDED.table_assignments,
-          updated_at = NOW();
-      `;
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.from('event_state').upsert({
+        id: 'default',
+        csv_text: INITIAL_LUMA_CSV,
+        manual_overrides: DEFAULT_OVERRIDES,
+        table_assignments: {},
+        updated_at: new Date().toISOString(),
+      });
     }
 
     return res.status(200).json({

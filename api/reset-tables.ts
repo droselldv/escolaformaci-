@@ -1,4 +1,4 @@
-import { getSql } from './_db';
+import { getSupabase } from './_db';
 import { INITIAL_TABLE_ASSIGNMENTS } from '../src/data/initialData';
 
 export default async function handler(req: any, res: any) {
@@ -20,13 +20,15 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const sql = getSql();
-    if (sql) {
-      await sql`
-        UPDATE event_state 
-        SET table_assignments = ${JSON.stringify(INITIAL_TABLE_ASSIGNMENTS)}, updated_at = NOW() 
-        WHERE id = 'default';
-      `;
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase
+        .from('event_state')
+        .update({
+          table_assignments: INITIAL_TABLE_ASSIGNMENTS,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', 'default');
     }
 
     return res.status(200).json({

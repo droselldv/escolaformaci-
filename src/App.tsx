@@ -26,6 +26,7 @@ import {
   AssignmentModalMode,
 } from './components/TableAssignmentModal';
 import { TableSearchAndUnassigned } from './components/TableSearchAndUnassigned';
+import { supabase } from './lib/supabase';
 import {
   Download,
   Upload,
@@ -166,12 +167,41 @@ export default function App() {
   const syncFromServer = async (showNotification = false) => {
     try {
       console.log('[CLIENT] Sincronitzant amb el servidor i Supabase...');
-      const res = await fetch('/api/data');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      if (json.success && json.data) {
-        if (json.db) setDbType(json.db);
-        const s = json.data;
+      let s: any = null;
+      let dbSource = 'Supabase';
+
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            s = json.data;
+            if (json.db) dbSource = json.db;
+          }
+        }
+      } catch {
+        // Fallback directly to Supabase client
+      }
+
+      if (!s) {
+        const { data: row, error } = await supabase
+          .from('event_state')
+          .select('*')
+          .eq('id', 'default')
+          .single();
+        if (!error && row) {
+          s = {
+            csvText: row.csv_text,
+            manualOverrides: row.manual_overrides,
+            tableAssignments: row.table_assignments,
+            updatedAt: row.updated_at,
+          };
+          dbSource = 'Supabase (Directe)';
+        }
+      }
+
+      if (s) {
+        setDbType(dbSource);
         if (s.csvText && s.csvText.length > 50) {
           setCsvText(s.csvText);
           localStorage.setItem('luma_event_csv', s.csvText);
@@ -201,6 +231,8 @@ export default function App() {
           });
         }
         console.log('[CLIENT] Dades carregades correctament de la base de dades.');
+      } else {
+        throw new Error('No s’han pogut obtenir dades de cap font');
       }
     } catch (err) {
       console.warn('[CLIENT] Error al sincronitzar des del servidor:', err);
@@ -217,53 +249,144 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     console.log('[CLIENT-INIT] Connexió inicial: recuperant estat de Supabase...');
-    fetch('/api/data')
-      .then(res => res.json())
-      .then(json => {
-        if (!mounted) return;
-        if (json.success && json.data) {
-          if (json.db) setDbType(json.db);
-          const s = json.data;
-          let loadedCsv = csvText;
-          let loadedOverrides = manualOverrides;
-          let loadedAssignments = tableAssignments;
 
-          if (s.csvText && s.csvText.length > 50) {
-            loadedCsv = s.csvText;
-            setCsvText(s.csvText);
-            localStorage.setItem('luma_event_csv', s.csvText);
-          }
-          if (s.manualOverrides) {
-            loadedOverrides = s.manualOverrides;
-            setManualOverrides(s.manualOverrides);
-            localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
-          }
-          if (s.tableAssignments) {
-            loadedAssignments = s.tableAssignments;
-            setTableAssignments(s.tableAssignments);
-            localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
-          }
+    const loadInitial = async () => {
+      let s: any = null;
+      let dbSource = 'Supabase';
 
-          lastSavedFingerprintRef.current = computeFingerprint(loadedCsv, loadedOverrides, loadedAssignments);
-          const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          setLastServerSyncTime(nowStr);
-          setLastServerSaveTime(nowStr);
-          setServerStatus('synced');
-          setHasPendingChanges(false);
-          console.log('[CLIENT-INIT] Estat inicial carregat amb èxit des de Supabase.');
+      try {
+        const res = await fetch('/api/data');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            s = json.data;
+            if (json.db) dbSource = json.db;
+          }
         }
-        hasLoadedInitialServerData.current = true;
-      })
-      .catch((err) => {
-        console.warn('[CLIENT-INIT] Error carregant dades del servidor a l’inici:', err);
+      } catch {
+        // Fallback to Supabase direct
+      }
+
+      if (!s) {
+        try {
+          const { data: row, error } = await supabase
+            .from('event_state')
+            .select('*')
+            .eq('id', 'default')
+            .single();
+          if (!error && row) {
+            s = {
+              csvText: row.csv_text,
+              manualOverrides: row.manual_overrides,
+              tableAssignments: row.table_assignments,
+              updatedAt: row.updated_at,
+            };
+            dbSource = 'Supabase (Directe)';
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!mounted) return;
+
+      if (s) {
+        setDbType(dbSource);
+        let loadedCsv = csvText;
+        let loadedOverrides = manualOverrides;
+        let loadedAssignments = tableAssignments;
+
+        // Comprovem si tenim assignacions locals prèvies que l'usuari no vol perdre
+        const hasExistingLocalAssignments = Boolean(
+          tableAssignments && Object.keys(tableAssignments).length > 0
+        );
+
+        if (s.csvText && s.csvText.length > 50) {
+          loadedCsv = s.csvText;
+          setCsvText(s.csvText);
+          localStorage.setItem('luma_event_csv', s.csvText);
+        }
+        if (s.manualOverrides) {
+          loadedOverrides = s.manualOverrides;
+          setManualOverrides(s.manualOverrides);
+          localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+        }
+        // Només carreguem assignacions si el servidor en té més o si l'usuari no en té de pendents
+        if (s.tableAssignments && (!hasExistingLocalAssignments || Object.keys(s.tableAssignments).length >= Object.keys(tableAssignments).length)) {
+          loadedAssignments = s.tableAssignments;
+          setTableAssignments(s.tableAssignments);
+          localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+        }
+
+        lastSavedFingerprintRef.current = computeFingerprint(loadedCsv, loadedOverrides, loadedAssignments);
+        const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastServerSyncTime(nowStr);
+        setLastServerSaveTime(nowStr);
         setServerStatus('synced');
-        hasLoadedInitialServerData.current = true;
-      });
+        setHasPendingChanges(false);
+        console.log('[CLIENT-INIT] Estat inicial carregat amb èxit des de Supabase.');
+      } else {
+        setServerStatus('synced');
+      }
+      hasLoadedInitialServerData.current = true;
+    };
+
+    loadInitial();
 
     return () => {
       mounted = false;
     };
   }, []);
+
+  // Pujar de forma segura tots els canvis locals a Supabase garantint que no es perdi res
+  const uploadLocalChangesToDb = async () => {
+    try {
+      setServerStatus('saving');
+      setStatusMsg({
+        type: 'success',
+        text: 'Pujant tots els canvis locals a Supabase...',
+      });
+
+      // Primer provem Supabase directament (100% garantit per HTTPS)
+      const { error: sbErr } = await supabase.from('event_state').upsert({
+        id: 'default',
+        csv_text: csvText,
+        manual_overrides: manualOverrides,
+        table_assignments: tableAssignments,
+        updated_at: new Date().toISOString()
+      });
+
+      if (!sbErr) {
+        setDbType('Supabase');
+        setServerStatus('synced');
+        setHasPendingChanges(false);
+        const timeStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastServerSaveTime(timeStr);
+        lastSavedFingerprintRef.current = computeFingerprint(csvText, manualOverrides, tableAssignments);
+        setStatusMsg({
+          type: 'success',
+          text: `✅ Tots els canvis locals s'han pujat i guardat a la base de dades a les ${timeStr}!`,
+        });
+
+        // Opcionalment avisem el servidor Express local
+        fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csvText,
+            manualOverrides,
+            tableAssignments,
+            clientId: clientIdRef.current,
+          }),
+        }).catch(() => {});
+      } else {
+        throw new Error(sbErr.message);
+      }
+    } catch (err: any) {
+      console.warn('[UPLOAD-LOCAL] Error pujant directe a Supabase, intentant servidor:', err);
+      saveToServer({ csvText, manualOverrides, tableAssignments }, true);
+    }
+  };
 
   // Funció per desar canvis a la base de dades amb cua i prevenció de peticions innecessàries
   const saveToServer = async (patch: Record<string, any>, manualTrigger = false) => {
@@ -286,22 +409,51 @@ export default function App() {
     }
     isSavingRef.current = true;
     setServerStatus('saving');
-    console.log('[CLIENT-SAVE] Enviant canvis reals a la base de dades:', Object.keys(patch));
+    console.log('[CLIENT-SAVE] Enviant canvis a la base de dades:', Object.keys(patch));
 
     try {
-      const clientId = clientIdRef.current;
-      const res = await fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...patch,
-          clientId,
-        }),
-      });
+      let savedSuccessfully = false;
 
-      if (res.ok) {
-        const json = await res.json().catch(() => null);
-        if (json?.db) setDbType(json.db);
+      // Intentem primer mitjançant la ruta del servidor
+      try {
+        const clientId = clientIdRef.current;
+        const res = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...patch,
+            clientId,
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json?.db) setDbType(json.db);
+          savedSuccessfully = true;
+        }
+      } catch (fetchErr) {
+        console.warn('[CLIENT-SAVE] Error servidor /api/data, provant Supabase directe...');
+      }
+
+      // Si el servidor ha fallat o retornat error, desem directament a Supabase
+      if (!savedSuccessfully) {
+        const { error: sbErr } = await supabase.from('event_state').upsert({
+          id: 'default',
+          csv_text: nextCsv,
+          manual_overrides: nextOverrides,
+          table_assignments: nextAssignments,
+          updated_at: new Date().toISOString()
+        });
+
+        if (!sbErr) {
+          setDbType('Supabase');
+          savedSuccessfully = true;
+        } else {
+          console.error('[CLIENT-SAVE] Error Supabase:', sbErr.message);
+        }
+      }
+
+      if (savedSuccessfully) {
         setServerStatus('synced');
         setHasPendingChanges(false);
         const timeStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -315,7 +467,7 @@ export default function App() {
         }
       } else {
         setServerStatus('offline');
-        console.error('[CLIENT-SAVE] Error retornat pel servidor:', res.status);
+        console.error('[CLIENT-SAVE] No s’han pogut desar els canvis a la base de dades.');
       }
     } catch (err) {
       setServerStatus('offline');
@@ -802,21 +954,19 @@ export default function App() {
             {/* Manual Send / Save to DB button */}
             <button
               type="button"
-              onClick={() => {
-                saveToServer({ csvText, manualOverrides, tableAssignments }, true);
-              }}
+              onClick={uploadLocalChangesToDb}
               className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[36px] sm:min-h-0 ${
                 hasPendingChanges
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white animate-pulse'
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
                   : 'bg-emerald-700 hover:bg-emerald-800 text-white'
               }`}
-              title="Enviar i desar immediatament tots els canvis a la base de dades Netlify"
+              title="Pujar i assegurar tots els teus canvis locals directament a Supabase"
             >
               <Database className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{hasPendingChanges ? 'Enviar canvis a BBDD' : 'Guardat a la BBDD'}</span>
-              <span className="sm:hidden">{hasPendingChanges ? 'Desar' : 'Desat'}</span>
+              <span className="hidden sm:inline">{hasPendingChanges ? 'Pujar canvis a Supabase' : 'Pujar canvis locals a BBDD'}</span>
+              <span className="sm:hidden">Pujar BBDD</span>
               {hasPendingChanges && (
-                <span className="w-2 h-2 rounded-full bg-amber-300"></span>
+                <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping"></span>
               )}
             </button>
 

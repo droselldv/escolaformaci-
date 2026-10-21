@@ -1,53 +1,26 @@
-import postgres from 'postgres';
+import { createClient } from '@supabase/supabase-js';
 
-export const DEFAULT_SUPABASE_URL =
-  'postgresql://postgres:Maxipichet2005!@db.cunpmmsjenlytbfflbra.supabase.co:5432/postgres';
+const SUPABASE_REST_URL =
+  process.env.VITE_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  'https://cunpmmsjenlytbfflbra.supabase.co';
 
-export function getDatabaseUrl(): string {
-  const raw =
-    process.env.SUPABASE_URL ||
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.NETLIFY_DB_URL ||
-    process.env.PG_CONNECTION_STRING ||
-    '';
+const SUPABASE_KEY =
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  'sb_publishable_XfVoRU7LafoZ8FqDKaB4sQ_mkekqazf';
 
-  if (!raw || typeof raw !== 'string') {
-    return DEFAULT_SUPABASE_URL;
-  }
-  let trimmed = raw.trim().replace(/^['"]+|['"]+$/g, '');
-  if (!trimmed) {
-    return DEFAULT_SUPABASE_URL;
-  }
-  return trimmed;
-}
+let cachedSupabase: any = null;
 
-let cachedSql: any = null;
-
-export function getSql() {
-  if (cachedSql) return cachedSql;
-  const url = getDatabaseUrl();
+export function getSupabase() {
+  if (cachedSupabase) return cachedSupabase;
   try {
-    cachedSql = postgres(url, {
-      ssl: 'require',
-      max: 1, // optimal for serverless lambdas
-      idle_timeout: 20,
-      connect_timeout: 10,
-    });
-    return cachedSql;
+    cachedSupabase = createClient(SUPABASE_REST_URL, SUPABASE_KEY);
+    return cachedSupabase;
   } catch (err) {
-    console.error('Error connectant a Supabase:', err);
-    try {
-      cachedSql = postgres(DEFAULT_SUPABASE_URL, {
-        ssl: 'require',
-        max: 1,
-        idle_timeout: 20,
-        connect_timeout: 10,
-      });
-      return cachedSql;
-    } catch {
-      return null;
-    }
+    console.error('Error inicialitzant Supabase client a API:', err);
+    return null;
   }
 }
 

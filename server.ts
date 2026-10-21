@@ -4,10 +4,30 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import postgres from 'postgres';
+import { createClient } from '@supabase/supabase-js';
 import { INITIAL_LUMA_CSV, INITIAL_TABLE_ASSIGNMENTS } from './src/data/initialData.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const SUPABASE_REST_URL =
+  process.env.VITE_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  'https://cunpmmsjenlytbfflbra.supabase.co';
+
+const SUPABASE_KEY =
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  'sb_publishable_XfVoRU7LafoZ8FqDKaB4sQ_mkekqazf';
+
+let supabase: any = null;
+try {
+  supabase = createClient(SUPABASE_REST_URL, SUPABASE_KEY);
+  console.log('Client Supabase (HTTPS REST) connectat amb èxit.');
+} catch (err) {
+  console.error('Error inicialitzant Supabase Client:', err);
+}
 
 const DEFAULT_SUPABASE_URL =
   'postgresql://postgres:Maxipichet2005!@db.cunpmmsjenlytbfflbra.supabase.co:5432/postgres';
@@ -23,39 +43,8 @@ function normalizeDatabaseUrl(rawUrl?: string | null): string {
   return trimmed;
 }
 
-// Check if Supabase / Postgres is configured via environment variable
-const RAW_DB_URL =
-  process.env.SUPABASE_URL ||
-  process.env.DATABASE_URL ||
-  process.env.POSTGRES_URL ||
-  process.env.NETLIFY_DB_URL ||
-  process.env.PG_CONNECTION_STRING ||
-  '';
-
-const DB_URL = normalizeDatabaseUrl(RAW_DB_URL);
-
+// Optional direct Postgres
 let sql: any = null;
-try {
-  sql = postgres(DB_URL, {
-    ssl: 'require',
-    max: 5,
-    idle_timeout: 30,
-    connect_timeout: 30,
-  });
-  console.log('Connected to Supabase (PostgreSQL)!');
-} catch (dbErr) {
-  console.log('Supabase connection setup, falling back to default:', dbErr);
-  try {
-    sql = postgres(DEFAULT_SUPABASE_URL, {
-      ssl: 'require',
-      max: 5,
-      idle_timeout: 30,
-      connect_timeout: 30,
-    });
-  } catch {
-    sql = null;
-  }
-}
 
 // Data directory & storage file
 const DATA_DIR = path.resolve(__dirname, 'data');
@@ -148,25 +137,16 @@ function sanitizeTableAssignments(raw: any): Record<string, { tableNumber: numbe
 
 // Load initial state from Supabase on startup if available with retry
 async function loadFromDbOnInit() {
-  if (!sql) return;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  if (supabase) {
     try {
-      console.log(`[DB-INIT] Connectant amb Supabase (intent ${attempt}/3)...`);
-      await sql`
-        CREATE TABLE IF NOT EXISTS event_state (
-          id TEXT PRIMARY KEY,
-          csv_text TEXT,
-          manual_overrides JSONB,
-          table_assignments JSONB,
-          spreadsheet_id TEXT,
-          spreadsheet_url TEXT,
-          last_synced_at TEXT,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `;
-      const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
-      if (rows && rows.length > 0) {
-        const row = rows[0];
+      console.log('[DB-INIT] Sincronitzant amb Supabase REST API...');
+      const { data: row, error } = await supabase
+        .from('event_state')
+        .select('*')
+        .eq('id', 'default')
+        .single();
+
+      if (!error && row) {
         const dbCsvLen = (row.csv_text || '').length;
         console.log(`[DB-INIT] Dades sincronitzades de Supabase amb èxit (${dbCsvLen} caràcters).`);
         const sanitizedAssignments = sanitizeTableAssignments(row.table_assignments);
@@ -180,21 +160,12 @@ async function loadFromDbOnInit() {
           lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
         };
         persistState();
-      } else {
-        await sql`
-          INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, updated_at)
-          VALUES ('default', ${stateCache.csvText}, ${JSON.stringify(stateCache.manualOverrides)}, ${JSON.stringify(stateCache.tableAssignments)}, NOW())
-          ON CONFLICT (id) DO NOTHING;
-        `;
+        return;
+      } else if (error) {
+        console.log('[DB-INIT] Resposta inicial Supabase:', error.message);
       }
-      return;
     } catch (err: any) {
-      if (attempt < 3) {
-        console.log(`[DB-INIT] Intent ${attempt} fallat (${err.message || 'timeout'}). Reintentant en 2s...`);
-        await new Promise((r) => setTimeout(r, 2000));
-      } else {
-        console.log('[DB-INIT] Supabase en repòs o no accessible directament; utilitzant dades locals persistides.');
-      }
+      console.log('[DB-INIT] Supabase inicialització:', err.message || err);
     }
   }
 }
@@ -278,13 +249,14 @@ async function startServer() {
   app.get('/api/data', async (_req, res) => {
     try {
       console.log('[API GET /api/data] Sol·licitud rebuda de sincronització inicial.');
-      if (sql) {
+      if (supabase) {
         try {
-          const fetchPromise = sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
-          const rows: any = await Promise.race([fetchPromise, timeoutPromise]);
-          if (rows && rows.length > 0) {
-            const row = rows[0];
+          const { data: row, error } = await supabase
+            .from('event_state')
+            .select('*')
+            .eq('id', 'default')
+            .single();
+          if (!error && row) {
             stateCache = {
               csvText: row.csv_text || stateCache.csvText,
               updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
@@ -295,14 +267,14 @@ async function startServer() {
               lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
             };
           }
-        } catch {
-          // Rapid fallback to memory cache if network has latency
+        } catch (sbErr) {
+          console.warn('[API GET /api/data] Avís consultant Supabase:', sbErr);
         }
       }
       res.json({
         success: true,
         data: stateCache,
-        db: sql ? 'Supabase (PostgreSQL)' : 'Server disk',
+        db: supabase ? 'Supabase' : 'Server disk',
       });
     } catch (e: any) {
       console.error('[API GET /api/data] Error consultant la base de dades:', e);
@@ -349,45 +321,26 @@ async function startServer() {
       persistState();
 
       let dbSaveSuccess = false;
-      if (sql) {
+      if (supabase) {
         try {
-          await sql`
-            CREATE TABLE IF NOT EXISTS event_state (
-              id TEXT PRIMARY KEY,
-              csv_text TEXT,
-              manual_overrides JSONB,
-              table_assignments JSONB,
-              spreadsheet_id TEXT,
-              spreadsheet_url TEXT,
-              last_synced_at TEXT,
-              updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-          `;
-          await sql`
-            INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, spreadsheet_id, spreadsheet_url, last_synced_at, updated_at)
-            VALUES (
-              'default',
-              ${stateCache.csvText},
-              ${JSON.stringify(stateCache.manualOverrides)},
-              ${JSON.stringify(stateCache.tableAssignments)},
-              ${stateCache.spreadsheetId},
-              ${stateCache.spreadsheetUrl},
-              ${stateCache.lastSyncedAt},
-              NOW()
-            )
-            ON CONFLICT (id) DO UPDATE SET
-              csv_text = EXCLUDED.csv_text,
-              manual_overrides = EXCLUDED.manual_overrides,
-              table_assignments = EXCLUDED.table_assignments,
-              spreadsheet_id = EXCLUDED.spreadsheet_id,
-              spreadsheet_url = EXCLUDED.spreadsheet_url,
-              last_synced_at = EXCLUDED.last_synced_at,
-              updated_at = NOW();
-          `;
-          dbSaveSuccess = true;
-          console.log('[API POST /api/data] Desat amb èxit a Supabase (PostgreSQL)!');
+          const { error: sbErr } = await supabase.from('event_state').upsert({
+            id: 'default',
+            csv_text: stateCache.csvText,
+            manual_overrides: stateCache.manualOverrides,
+            table_assignments: stateCache.tableAssignments,
+            spreadsheet_id: stateCache.spreadsheetId,
+            spreadsheet_url: stateCache.spreadsheetUrl,
+            last_synced_at: stateCache.lastSyncedAt,
+            updated_at: stateCache.updatedAt,
+          });
+          if (!sbErr) {
+            dbSaveSuccess = true;
+            console.log('[API POST /api/data] Desat amb èxit a Supabase (REST API)!');
+          } else {
+            console.error('[API POST /api/data] Error Supabase:', sbErr.message);
+          }
         } catch (dbErr) {
-          console.error('[API POST /api/data] Error escrivint a Supabase:', dbErr);
+          console.error('[API POST /api/data] Excepció escrivint a Supabase:', dbErr);
         }
       }
 
@@ -402,7 +355,7 @@ async function startServer() {
       res.json({
         success: true,
         updatedAt: stateCache.updatedAt,
-        db: sql ? (dbSaveSuccess ? 'Supabase' : 'Server disk (DB write failed)') : 'Server disk',
+        db: supabase ? (dbSaveSuccess ? 'Supabase' : 'Server disk (DB write pending)') : 'Server disk',
         message: 'Dades desades correctament.',
       });
     } catch (error: any) {
@@ -474,11 +427,12 @@ async function startServer() {
       stateCache.tableAssignments = { ...INITIAL_TABLE_ASSIGNMENTS };
       stateCache.updatedAt = new Date().toISOString();
       persistState();
-      if (sql) {
+      if (supabase) {
         try {
-          await sql`
-            UPDATE event_state SET table_assignments = ${JSON.stringify(INITIAL_TABLE_ASSIGNMENTS)}::jsonb, updated_at = NOW() WHERE id = 'default';
-          `;
+          await supabase.from('event_state').update({
+            table_assignments: INITIAL_TABLE_ASSIGNMENTS,
+            updated_at: new Date().toISOString()
+          }).eq('id', 'default');
         } catch (dbErr) {
           console.warn('[API reset-tables] Error actualitzant Supabase:', dbErr);
         }

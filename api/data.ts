@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { INITIAL_LUMA_CSV } from '../src/data/initialData';
-import { getSql, sanitizeTableAssignments } from './_db';
+import { getSupabase, sanitizeTableAssignments } from './_db';
 
 const DEFAULT_OVERRIDES = {
   'gst-4EiPYqOwuE90vqE': {
@@ -55,16 +55,18 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const sql = getSql();
+  const supabase = getSupabase();
 
   if (req.method === 'GET') {
     try {
-      if (sql) {
-        const fetchPromise = sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
-        const rows: any = await Promise.race([fetchPromise, timeoutPromise]);
-        if (rows && rows.length > 0) {
-          const row = rows[0];
+      if (supabase) {
+        const { data: row, error } = await supabase
+          .from('event_state')
+          .select('*')
+          .eq('id', 'default')
+          .single();
+
+        if (!error && row) {
           memoryState = {
             csvText: row.csv_text || memoryState.csvText,
             updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : memoryState.updatedAt,
@@ -83,7 +85,7 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({
       success: true,
       data: memoryState,
-      db: sql ? 'Supabase (PostgreSQL)' : 'Serverless cache',
+      db: supabase ? 'Supabase (HTTPS REST)' : 'Serverless cache',
     });
   }
 
@@ -109,49 +111,33 @@ export default async function handler(req: any, res: any) {
         // memory state preserved
       }
 
-      if (sql) {
+      let dbSaved = false;
+      if (supabase) {
         try {
-          await sql`
-            CREATE TABLE IF NOT EXISTS event_state (
-              id TEXT PRIMARY KEY,
-              csv_text TEXT,
-              manual_overrides JSONB,
-              table_assignments JSONB,
-              spreadsheet_id TEXT,
-              spreadsheet_url TEXT,
-              last_synced_at TEXT,
-              updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-          `;
-          await sql`
-            INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, spreadsheet_id, spreadsheet_url, last_synced_at, updated_at)
-            VALUES (
-              'default',
-              ${memoryState.csvText},
-              ${JSON.stringify(memoryState.manualOverrides)},
-              ${JSON.stringify(memoryState.tableAssignments)},
-              ${memoryState.spreadsheetId},
-              ${memoryState.spreadsheetUrl},
-              ${memoryState.lastSyncedAt},
-              NOW()
-            )
-            ON CONFLICT (id) DO UPDATE SET
-              csv_text = EXCLUDED.csv_text,
-              manual_overrides = EXCLUDED.manual_overrides,
-              table_assignments = EXCLUDED.table_assignments,
-              spreadsheet_id = EXCLUDED.spreadsheet_id,
-              spreadsheet_url = EXCLUDED.spreadsheet_url,
-              last_synced_at = EXCLUDED.last_synced_at,
-              updated_at = NOW();
-          `;
+          const { error } = await supabase.from('event_state').upsert({
+            id: 'default',
+            csv_text: memoryState.csvText,
+            manual_overrides: memoryState.manualOverrides,
+            table_assignments: memoryState.tableAssignments,
+            spreadsheet_id: memoryState.spreadsheetId,
+            spreadsheet_url: memoryState.spreadsheetUrl,
+            last_synced_at: memoryState.lastSyncedAt,
+            updated_at: memoryState.updatedAt,
+          });
+          if (!error) {
+            dbSaved = true;
+          } else {
+            console.error('[API POST /api/data] Supabase upsert error:', error.message);
+          }
         } catch (dbErr) {
-          console.error('[Vercel API POST /api/data] DB save error:', dbErr);
+          console.error('[API POST /api/data] DB save error:', dbErr);
         }
       }
 
       return res.status(200).json({
         success: true,
         updatedAt: memoryState.updatedAt,
+        db: supabase ? (dbSaved ? 'Supabase' : 'Serverless memory (DB fallback)') : 'Serverless cache',
         message: 'Dades desades correctament a la base de dades.',
       });
     } catch (err: any) {
