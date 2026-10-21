@@ -21,11 +21,9 @@ import { ImportModal } from './components/ImportModal';
 import { EditGuestModal } from './components/EditGuestModal';
 import { ExportCustomModal } from './components/ExportCustomModal';
 import { PrintModal } from './components/PrintModal';
-import {
-  TableAssignmentModal,
-  AssignmentModalMode,
-} from './components/TableAssignmentModal';
+import { TableAssignmentModal, AssignmentModalMode } from './components/TableAssignmentModal';
 import { TableSearchAndUnassigned } from './components/TableSearchAndUnassigned';
+import { AddGuestModal } from './components/AddGuestModal';
 import { supabase } from './lib/supabase';
 import {
   Download,
@@ -41,6 +39,7 @@ import {
   AlertCircle,
   LayoutGrid,
   FileText,
+  UserPlus,
 } from 'lucide-react';
 
 export default function App() {
@@ -118,6 +117,7 @@ export default function App() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isCustomExportOpen, setIsCustomExportOpen] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
+  const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<ProcessedGuest | null>(null);
   const [tableModalMode, setTableModalMode] = useState<AssignmentModalMode | null>(null);
 
@@ -889,6 +889,127 @@ export default function App() {
     });
   };
 
+  /**
+   * Helper to escape CSV cell
+   */
+  const escapeCsv = (val?: string | null): string => {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  /**
+   * Add a brand new guest/diner manually
+   */
+  const handleAddGuest = (guestData: {
+    name: string;
+    staysForLunch: boolean;
+    dish: string;
+    tableNumber: number | null;
+    seatNumber: number | null;
+    municipi?: string;
+    comarca?: string;
+    phone?: string;
+    email?: string;
+  }) => {
+    const rawName = guestData.name.trim();
+    let firstName = '';
+    let lastName = '';
+    if (rawName.includes(',')) {
+      const parts = rawName.split(',');
+      lastName = parts[0].trim();
+      firstName = parts.slice(1).join(',').trim();
+    } else {
+      const parts = rawName.split(/\s+/);
+      if (parts.length > 1) {
+        firstName = parts[0];
+        lastName = parts.slice(1).join(' ');
+      } else {
+        firstName = parts[0];
+        lastName = '';
+      }
+    }
+
+    const uniqueId = `gst-manual-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const createdAt = new Date().toISOString();
+    const ticketName = guestData.staysForLunch ? 'Formació + Dinar' : 'Formació';
+    const dish = guestData.staysForLunch ? (guestData.dish || 'Carn - Cap de llom') : 'No em quedo al dinar';
+
+    // 38 columns matching header
+    const rowFields = [
+      uniqueId,                                       // 0: guest_id
+      rawName,                                        // 1: name
+      firstName,                                      // 2: first_name
+      lastName,                                       // 3: last_name
+      guestData.email || '',                          // 4: email
+      guestData.phone || '',                          // 5: phone_number
+      createdAt,                                      // 6: created_at
+      'approved',                                     // 7: approval_status
+      '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', // 8-23
+      guestData.staysForLunch ? '€38.00' : '€15.00',  // 24: amount
+      '', '',                                         // 25-26
+      'eur',                                          // 27: currency
+      '', '', '', '', '', '',                         // 28-33
+      ticketName,                                     // 34: ticket_name
+      guestData.comarca || '',                        // 35: Comarca
+      guestData.municipi || '',                       // 36: Municipi
+      dish,                                           // 37: Dinar - Segon plat a escollir (si escau)
+    ];
+
+    const newRow = rowFields.map(escapeCsv).join(',');
+    const nextCsv = csvText.trimEnd() + '\n' + newRow;
+
+    // Table assignment
+    const nextAssignments: TableAssignmentsMap = { ...tableAssignments };
+    if (guestData.staysForLunch && guestData.tableNumber) {
+      nextAssignments[uniqueId] = {
+        tableNumber: guestData.tableNumber,
+        seatNumber: guestData.seatNumber ?? null,
+      };
+    }
+
+    // Manual override to ensure exact dish and name preservation
+    const nextOverrides: ManualOverridesMap = {
+      ...manualOverrides,
+      [uniqueId]: {
+        name: rawName,
+        first_name: firstName,
+        last_name: lastName,
+        stays: guestData.staysForLunch,
+        dish: dish,
+      },
+    };
+    if (guestData.email) {
+      nextOverrides[guestData.email] = nextOverrides[uniqueId];
+    }
+
+    setCsvText(nextCsv);
+    setTableAssignments(nextAssignments);
+    setManualOverrides(nextOverrides);
+
+    // Persist to server & Supabase immediately
+    saveToServer(
+      {
+        csvText: nextCsv,
+        tableAssignments: nextAssignments,
+        manualOverrides: nextOverrides,
+      },
+      true
+    );
+
+    setStatusMsg({
+      type: 'success',
+      text: `S'ha afegit correctament ${rawName}${
+        guestData.staysForLunch && guestData.tableNumber
+          ? ` a la Taula ${guestData.tableNumber}${guestData.seatNumber ? ` (Seient #${guestData.seatNumber})` : ''}`
+          : ''
+      }.`,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col antialiased selection:bg-blue-500/10 selection:text-blue-900">
       {/* Top Header - Clean, Minimalist Enterprise */}
@@ -1027,14 +1148,24 @@ export default function App() {
 
           {/* Action buttons responsive grid */}
           <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+            {/* Nou Assistent button */}
+            <button
+              onClick={() => setIsAddGuestOpen(true)}
+              className="col-span-2 sm:col-span-1 px-3.5 py-2 sm:py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[38px] sm:min-h-0"
+              title="Afegir un nou assistent o comensal manualment"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>+ Nou Assistent</span>
+            </button>
+
             {/* Prominent black download button (Full width on mobile) */}
             <button
               onClick={() => setIsPrintOpen(true)}
-              className="col-span-2 sm:col-span-1 px-3.5 py-2 sm:py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[38px] sm:min-h-0"
+              className="px-3.5 py-2 sm:py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[38px] sm:min-h-0"
               title="Descarregar o imprimir llistat en format PDF net i ordenat"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Descarregar / Imprimir PDF</span>
+              <span>PDF</span>
             </button>
 
             <button
@@ -1121,6 +1252,7 @@ export default function App() {
                 setTableModalMode({ type: 'assign_unassigned', guest })
               }
               onCreateNewTable={handleCreateNewTable}
+              onOpenAddGuest={() => setIsAddGuestOpen(true)}
               onResetTables={handleResetTables}
               onEditGuest={guest => setEditingGuest(guest)}
             />
@@ -1154,6 +1286,7 @@ export default function App() {
             onOpenCustomModal={() => setIsCustomExportOpen(true)}
             onToggleLunchStatus={handleToggleLunchStatus}
             onEditGuest={guest => setEditingGuest(guest)}
+            onOpenAddGuest={() => setIsAddGuestOpen(true)}
           />
         )}
       </main>
@@ -1275,6 +1408,14 @@ export default function App() {
         tables={analysis.tables}
         onClose={() => setEditingGuest(null)}
         onSave={handleSaveGuestEdit}
+      />
+
+      {/* Add Guest Modal */}
+      <AddGuestModal
+        isOpen={isAddGuestOpen}
+        tables={analysis.tables}
+        onClose={() => setIsAddGuestOpen(false)}
+        onAddGuest={handleAddGuest}
       />
     </div>
   );

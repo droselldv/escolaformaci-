@@ -26,6 +26,7 @@ interface TableSearchAndUnassignedProps {
   onUnassignGuest: (guest: ProcessedGuest) => void;
   onOpenAssignUnassigned: (guest: ProcessedGuest) => void;
   onCreateNewTable: () => void;
+  onOpenAddGuest?: () => void;
   onResetTables?: () => void;
   onEditGuest?: (guest: ProcessedGuest) => void;
 }
@@ -41,6 +42,7 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
   onUnassignGuest,
   onOpenAssignUnassigned,
   onCreateNewTable,
+  onOpenAddGuest,
   onResetTables,
   onEditGuest,
 }) => {
@@ -113,10 +115,22 @@ export const TableSearchAndUnassigned: React.FC<TableSearchAndUnassignedProps> =
             </div>
           )}
 
+          {onOpenAddGuest && (
+            <button
+              type="button"
+              onClick={onOpenAddGuest}
+              className="px-3.5 py-2 sm:py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs min-h-[38px] sm:min-h-0 ml-auto sm:ml-0"
+              title="Afegir un nou assistent o comensal al llistat"
+            >
+              <UserPlus className="w-4 h-4 text-white" />
+              <span>+ Nou Assistent</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onCreateNewTable}
-            className="px-3.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer min-h-[38px] sm:min-h-0 ml-auto sm:ml-0"
+            className="px-3.5 py-2 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer min-h-[38px] sm:min-h-0"
             title="Afegir una nova taula buida de 10 places"
           >
             <Plus className="w-4 h-4 text-slate-500" />

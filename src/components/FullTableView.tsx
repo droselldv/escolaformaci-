@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   Layers,
   Phone,
+  UserPlus,
 } from 'lucide-react';
 
 interface FullTableViewProps {
@@ -22,6 +23,7 @@ interface FullTableViewProps {
   onOpenCustomModal: () => void;
   onToggleLunchStatus?: (guestId: string) => void;
   onEditGuest?: (guest: ProcessedGuest) => void;
+  onOpenAddGuest?: () => void;
 }
 
 function getColumnValue(
@@ -114,6 +116,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
   onOpenCustomModal,
   onToggleLunchStatus,
   onEditGuest,
+  onOpenAddGuest,
 }) => {
   const [activeSheet, setActiveSheet] = useState<'sheet1' | 'sheet2' | 'sheet3'>('sheet1');
   const [searchQuery, setSearchQuery] = useState('');
@@ -252,6 +255,18 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                 <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
                 <span>Columnes ({options.columns.length})</span>
               </button>
+
+              {onOpenAddGuest && (
+                <button
+                  type="button"
+                  onClick={onOpenAddGuest}
+                  className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5 cursor-pointer min-h-[36px] sm:min-h-0 shadow-xs"
+                  title="Afegir nou assistent manualment"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-white" />
+                  <span>+ Nou Assistent</span>
+                </button>
+              )}
             </>
           )}
         </div>
