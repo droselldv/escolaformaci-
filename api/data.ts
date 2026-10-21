@@ -81,7 +81,7 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({
       success: true,
       data: memoryState,
-      db: sql ? 'Netlify Database (PostgreSQL)' : 'Serverless cache',
+      db: sql ? 'Supabase (PostgreSQL)' : 'Serverless cache',
     });
   }
 

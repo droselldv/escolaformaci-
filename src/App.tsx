@@ -127,7 +127,7 @@ export default function App() {
 
   // Server synchronization status
   const [serverStatus, setServerStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
-  const [dbType, setDbType] = useState<string>('Netlify DB (PostgreSQL)');
+  const [dbType, setDbType] = useState<string>('Supabase (PostgreSQL)');
   const [lastServerSaveTime, setLastServerSaveTime] = useState<string>('En sincronia');
   const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
   const [lastServerSyncTime, setLastServerSyncTime] = useState<string>('');
@@ -165,7 +165,7 @@ export default function App() {
   // Manual reload / sync from server on demand
   const syncFromServer = async (showNotification = false) => {
     try {
-      console.log('[CLIENT] Sincronitzant amb el servidor i Netlify DB...');
+      console.log('[CLIENT] Sincronitzant amb el servidor i Supabase...');
       const res = await fetch('/api/data');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
@@ -216,7 +216,7 @@ export default function App() {
   // 1. Càrrega inicial exclusiva quan l'usuari entra a la pàgina
   useEffect(() => {
     let mounted = true;
-    console.log('[CLIENT-INIT] Connexió inicial: recuperant estat de Netlify DB...');
+    console.log('[CLIENT-INIT] Connexió inicial: recuperant estat de Supabase...');
     fetch('/api/data')
       .then(res => res.json())
       .then(json => {
@@ -250,7 +250,7 @@ export default function App() {
           setLastServerSaveTime(nowStr);
           setServerStatus('synced');
           setHasPendingChanges(false);
-          console.log('[CLIENT-INIT] Estat inicial carregat amb èxit des de Netlify DB.');
+          console.log('[CLIENT-INIT] Estat inicial carregat amb èxit des de Supabase.');
         }
         hasLoadedInitialServerData.current = true;
       })

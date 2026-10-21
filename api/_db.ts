@@ -1,38 +1,50 @@
-import { neon } from '@neondatabase/serverless';
+import postgres from 'postgres';
 
-export const DEFAULT_NETLIFY_DB_URL =
-  'postgresql://netlifydb_owner:npg_AiNxyslK68CZ@ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com/netlifydb?sslmode=require';
+export const DEFAULT_SUPABASE_URL =
+  'postgresql://postgres:Maxipichet2005!@db.cunpmmsjenlytbfflbra.supabase.co:5432/postgres';
 
 export function getDatabaseUrl(): string {
   const raw =
-    process.env.NETLIFY_DB_URL ||
-    process.env.NETLIFY_DATABASE_URL ||
+    process.env.SUPABASE_URL ||
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
+    process.env.NETLIFY_DB_URL ||
     process.env.PG_CONNECTION_STRING ||
     '';
 
   if (!raw || typeof raw !== 'string') {
-    return DEFAULT_NETLIFY_DB_URL;
+    return DEFAULT_SUPABASE_URL;
   }
   let trimmed = raw.trim().replace(/^['"]+|['"]+$/g, '');
   if (!trimmed) {
-    return DEFAULT_NETLIFY_DB_URL;
-  }
-  if (!trimmed.includes('sslmode=')) {
-    trimmed += (trimmed.includes('?') ? '&' : '?') + 'sslmode=require';
+    return DEFAULT_SUPABASE_URL;
   }
   return trimmed;
 }
 
+let cachedSql: any = null;
+
 export function getSql() {
+  if (cachedSql) return cachedSql;
   const url = getDatabaseUrl();
   try {
-    return neon(url);
+    cachedSql = postgres(url, {
+      ssl: 'require',
+      max: 1, // optimal for serverless lambdas
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
+    return cachedSql;
   } catch (err) {
-    console.error('Error connectant a la base de dades:', err);
+    console.error('Error connectant a Supabase:', err);
     try {
-      return neon(DEFAULT_NETLIFY_DB_URL);
+      cachedSql = postgres(DEFAULT_SUPABASE_URL, {
+        ssl: 'require',
+        max: 1,
+        idle_timeout: 20,
+        connect_timeout: 10,
+      });
+      return cachedSql;
     } catch {
       return null;
     }

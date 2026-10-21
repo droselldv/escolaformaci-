@@ -3,50 +3,32 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { neon } from '@neondatabase/serverless';
+import postgres from 'postgres';
 import { INITIAL_LUMA_CSV } from './src/data/initialData.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DEFAULT_NETLIFY_DB_URL =
-  'postgresql://netlifydb_owner:npg_AiNxyslK68CZ@ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com/netlifydb?sslmode=require';
+const DEFAULT_SUPABASE_URL =
+  'postgresql://postgres:Maxipichet2005!@db.cunpmmsjenlytbfflbra.supabase.co:5432/postgres';
 
 function normalizeDatabaseUrl(rawUrl?: string | null): string {
   if (!rawUrl || typeof rawUrl !== 'string') {
-    return DEFAULT_NETLIFY_DB_URL;
+    return DEFAULT_SUPABASE_URL;
   }
   let trimmed = rawUrl.trim().replace(/^['"]+|['"]+$/g, '');
   if (!trimmed) {
-    return DEFAULT_NETLIFY_DB_URL;
+    return DEFAULT_SUPABASE_URL;
   }
-  // Complete valid postgres url
-  if (trimmed.startsWith('postgresql://') || trimmed.startsWith('postgres://')) {
-    if (!trimmed.includes('sslmode=')) {
-      trimmed += (trimmed.includes('?') ? '&' : '?') + 'sslmode=require';
-    }
-    return trimmed;
-  }
-  // User or Netlify provided only host or host/db without scheme or credentials
-  if (trimmed.includes('ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com')) {
-    return DEFAULT_NETLIFY_DB_URL;
-  }
-  // User provided username:password@host/dbname without scheme
-  if (trimmed.includes('@')) {
-    let withScheme = `postgresql://${trimmed}`;
-    if (!withScheme.includes('sslmode=')) {
-      withScheme += (withScheme.includes('?') ? '&' : '?') + 'sslmode=require';
-    }
-    return withScheme;
-  }
-  return DEFAULT_NETLIFY_DB_URL;
+  return trimmed;
 }
 
-// Check if Netlify Database / Neon Postgres is configured via environment variable
+// Check if Supabase / Postgres is configured via environment variable
 const RAW_DB_URL =
-  process.env.NETLIFY_DB_URL ||
-  process.env.NETLIFY_DATABASE_URL ||
+  process.env.SUPABASE_URL ||
   process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.NETLIFY_DB_URL ||
   process.env.PG_CONNECTION_STRING ||
   '';
 
@@ -54,14 +36,24 @@ const DB_URL = normalizeDatabaseUrl(RAW_DB_URL);
 
 let sql: any = null;
 try {
-  sql = neon(DB_URL);
-  console.log('Connected to Netlify Database (PostgreSQL / Neon)!');
-} catch (neonErr) {
-  console.warn('Neon initialization with DB_URL failed, falling back to default:', neonErr);
+  sql = postgres(DB_URL, {
+    ssl: 'require',
+    max: 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+  });
+  console.log('Connected to Supabase (PostgreSQL)!');
+} catch (dbErr) {
+  console.warn('Database initialization with DB_URL failed, falling back to default:', dbErr);
   try {
-    sql = neon(DEFAULT_NETLIFY_DB_URL);
+    sql = postgres(DEFAULT_SUPABASE_URL, {
+      ssl: 'require',
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
   } catch (err2) {
-    console.error('Fatal Neon initialization error:', err2);
+    console.error('Fatal Database initialization error:', err2);
     sql = null;
   }
 }
@@ -155,11 +147,11 @@ function sanitizeTableAssignments(raw: any): Record<string, { tableNumber: numbe
   return clean;
 }
 
-// Load initial state from Netlify DB on startup if available
+// Load initial state from Supabase on startup if available
 async function loadFromDbOnInit() {
   if (!sql) return;
   try {
-    console.log('[DB-INIT] Checking existing event state in Netlify DB...');
+    console.log('[DB-INIT] Checking existing event state in Supabase...');
     await sql`
       CREATE TABLE IF NOT EXISTS event_state (
         id TEXT PRIMARY KEY,
@@ -176,7 +168,7 @@ async function loadFromDbOnInit() {
     if (rows && rows.length > 0) {
       const row = rows[0];
       const dbCsvLen = (row.csv_text || '').length;
-      console.log(`[DB-INIT] Found existing row in Netlify DB (CSV length: ${dbCsvLen}, updated_at: ${row.updated_at})`);
+      console.log(`[DB-INIT] Found existing row in Supabase (CSV length: ${dbCsvLen}, updated_at: ${row.updated_at})`);
       const sanitizedAssignments = sanitizeTableAssignments(row.table_assignments);
       stateCache = {
         csvText: row.csv_text && row.csv_text.length > 50 ? row.csv_text : stateCache.csvText,
@@ -302,7 +294,7 @@ async function startServer() {
       res.json({
         success: true,
         data: stateCache,
-        db: sql ? 'Netlify Database' : 'Server disk',
+        db: sql ? 'Supabase (PostgreSQL)' : 'Server disk',
       });
     } catch (e: any) {
       console.error('[API GET /api/data] Error consultant la base de dades:', e);
@@ -385,9 +377,9 @@ async function startServer() {
               updated_at = NOW();
           `;
           dbSaveSuccess = true;
-          console.log('[API POST /api/data] Desat amb èxit a Netlify Database (PostgreSQL)!');
+          console.log('[API POST /api/data] Desat amb èxit a Supabase (PostgreSQL)!');
         } catch (dbErr) {
-          console.error('[API POST /api/data] Error escrivint a Netlify DB:', dbErr);
+          console.error('[API POST /api/data] Error escrivint a Supabase:', dbErr);
         }
       }
 
@@ -402,7 +394,7 @@ async function startServer() {
       res.json({
         success: true,
         updatedAt: stateCache.updatedAt,
-        db: sql ? (dbSaveSuccess ? 'Netlify Database' : 'Server disk (DB write failed)') : 'Server disk',
+        db: sql ? (dbSaveSuccess ? 'Supabase' : 'Server disk (DB write failed)') : 'Server disk',
         message: 'Dades desades correctament.',
       });
     } catch (error: any) {
