@@ -24,11 +24,6 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis }) => {
       detail: `${analysis.totalRegistered > 0 ? Math.round((analysis.totalLunch / analysis.totalRegistered) * 100) : 0}% del total`,
     },
     {
-      label: 'Taules de 10',
-      value: analysis.totalTables,
-      detail: 'Capacitat assignada',
-    },
-    {
       label: 'Carn (Cap de llom)',
       value: carn.count,
       detail: `${carn.percentage}% dels dinars`,
@@ -38,22 +33,17 @@ export const OverviewCards: React.FC<OverviewCardsProps> = ({ analysis }) => {
       value: peix.count,
       detail: `${peix.percentage}% dels dinars`,
     },
-    ...(vege.count > 0
-      ? [
-          {
-            label: 'Vegetarià / Vegà',
-            value: vege.count,
-            detail: `${vege.percentage}% dels dinars`,
-            highlight: true,
-          },
-        ]
-      : [
-          {
-            label: 'Sense Dinar',
-            value: analysis.totalNoLunch,
-            detail: 'Només formació',
-          },
-        ]),
+    {
+      label: 'Vegetarià / Vegà',
+      value: vege.count,
+      detail: `${vege.percentage}% dels dinars`,
+      highlight: true,
+    },
+    {
+      label: 'Taules de 10',
+      value: analysis.totalTables,
+      detail: 'Capacitat assignada',
+    },
   ];
 
   return (

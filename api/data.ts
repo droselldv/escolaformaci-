@@ -1,58 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { neon } from '@neondatabase/serverless';
 import { INITIAL_LUMA_CSV } from '../src/data/initialData';
-
-const DEFAULT_NETLIFY_DB_URL =
-  'postgresql://netlifydb_owner:npg_AiNxyslK68CZ@ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com/netlifydb?sslmode=require';
-
-function normalizeDatabaseUrl(rawUrl?: string | null): string {
-  if (!rawUrl || typeof rawUrl !== 'string') {
-    return DEFAULT_NETLIFY_DB_URL;
-  }
-  let trimmed = rawUrl.trim().replace(/^['"]+|['"]+$/g, '');
-  if (!trimmed) {
-    return DEFAULT_NETLIFY_DB_URL;
-  }
-  if (trimmed.startsWith('postgresql://') || trimmed.startsWith('postgres://')) {
-    if (!trimmed.includes('sslmode=')) {
-      trimmed += (trimmed.includes('?') ? '&' : '?') + 'sslmode=require';
-    }
-    return trimmed;
-  }
-  if (trimmed.includes('ep-green-tree-b4epczig.c-6.us-east-2.db.netlify.com')) {
-    return DEFAULT_NETLIFY_DB_URL;
-  }
-  if (trimmed.includes('@')) {
-    let withScheme = `postgresql://${trimmed}`;
-    if (!withScheme.includes('sslmode=')) {
-      withScheme += (withScheme.includes('?') ? '&' : '?') + 'sslmode=require';
-    }
-    return withScheme;
-  }
-  return DEFAULT_NETLIFY_DB_URL;
-}
-
-const RAW_DB_URL =
-  process.env.NETLIFY_DB_URL ||
-  process.env.NETLIFY_DATABASE_URL ||
-  process.env.DATABASE_URL ||
-  process.env.PG_CONNECTION_STRING ||
-  '';
-
-const DB_URL = normalizeDatabaseUrl(RAW_DB_URL);
-
-let sql: any = null;
-try {
-  sql = neon(DB_URL);
-} catch {
-  try {
-    sql = neon(DEFAULT_NETLIFY_DB_URL);
-  } catch {
-    sql = null;
-  }
-}
+import { getSql, sanitizeTableAssignments } from './_db';
 
 const DEFAULT_OVERRIDES = {
   'gst-4EiPYqOwuE90vqE': {
@@ -80,7 +30,7 @@ let memoryState = {
 
 const TMP_FILE = path.resolve('/tmp', 'luma_event_data.json');
 
-// Try loading from /tmp
+// Try loading from /tmp if available
 try {
   if (fs.existsSync(TMP_FILE)) {
     const raw = fs.readFileSync(TMP_FILE, 'utf-8');
@@ -105,6 +55,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  const sql = getSql();
+
   if (req.method === 'GET') {
     try {
       if (sql) {
@@ -115,7 +67,7 @@ export default async function handler(req: any, res: any) {
             csvText: row.csv_text || memoryState.csvText,
             updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : memoryState.updatedAt,
             manualOverrides: row.manual_overrides || memoryState.manualOverrides,
-            tableAssignments: row.table_assignments || memoryState.tableAssignments,
+            tableAssignments: sanitizeTableAssignments(row.table_assignments || memoryState.tableAssignments),
             spreadsheetId: row.spreadsheet_id || memoryState.spreadsheetId,
             spreadsheetUrl: row.spreadsheet_url || memoryState.spreadsheetUrl,
             lastSyncedAt: row.last_synced_at || memoryState.lastSyncedAt,
@@ -123,12 +75,13 @@ export default async function handler(req: any, res: any) {
         }
       }
     } catch (dbErr) {
-      console.warn('DB fetch warning:', dbErr);
+      console.warn('[Vercel API GET /api/data] DB fetch warning:', dbErr);
     }
+
     return res.status(200).json({
       success: true,
       data: memoryState,
-      db: sql ? 'Netlify Database' : 'Serverless cache',
+      db: sql ? 'Netlify Database (PostgreSQL)' : 'Serverless cache',
     });
   }
 
@@ -140,20 +93,7 @@ export default async function handler(req: any, res: any) {
       if (csvText !== undefined) memoryState.csvText = csvText;
       if (manualOverrides !== undefined) memoryState.manualOverrides = manualOverrides;
       if (tableAssignments !== undefined) {
-        const clean: Record<string, any> = {};
-        if (tableAssignments && typeof tableAssignments === 'object') {
-          for (const [k, v] of Object.entries(tableAssignments)) {
-            if (v && typeof v === 'object') {
-              const a = v as any;
-              if (a.tableNumber === null) {
-                clean[k] = { tableNumber: null, seatNumber: null };
-              } else if (typeof a.tableNumber === 'number' && a.tableNumber > 0 && a.tableNumber <= 30) {
-                clean[k] = { tableNumber: a.tableNumber, seatNumber: typeof a.seatNumber === 'number' ? a.seatNumber : null };
-              }
-            }
-          }
-        }
-        memoryState.tableAssignments = clean;
+        memoryState.tableAssignments = sanitizeTableAssignments(tableAssignments);
       }
       if (spreadsheetId !== undefined) memoryState.spreadsheetId = spreadsheetId;
       if (spreadsheetUrl !== undefined) memoryState.spreadsheetUrl = spreadsheetUrl;
@@ -203,19 +143,19 @@ export default async function handler(req: any, res: any) {
               updated_at = NOW();
           `;
         } catch (dbErr) {
-          console.error('DB save error:', dbErr);
+          console.error('[Vercel API POST /api/data] DB save error:', dbErr);
         }
       }
 
       return res.status(200).json({
         success: true,
         updatedAt: memoryState.updatedAt,
-        message: 'Dades desades correctament a la base de dades de Netlify.',
+        message: 'Dades desades correctament a la base de dades.',
       });
     } catch (err: any) {
       return res.status(500).json({
         success: false,
-        error: err.message,
+        error: err.message || 'Error processant la sol·licitud',
       });
     }
   }

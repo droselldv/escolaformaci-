@@ -135,6 +135,33 @@ export default function App() {
   const isSavingRef = useRef(false);
   const pendingSavePatchRef = useRef<Record<string, any> | null>(null);
 
+  // Client ID to identify the current browser session and avoid SSE broadcast echo loops
+  const clientIdRef = useRef<string>(
+    typeof window !== 'undefined'
+      ? (() => {
+          try {
+            const stored = sessionStorage.getItem('luma_client_id');
+            if (stored) return stored;
+            const newId = `cli-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+            sessionStorage.setItem('luma_client_id', newId);
+            return newId;
+          } catch {
+            return `cli-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+          }
+        })()
+      : 'cli-default'
+  );
+
+  // Fingerprint tracker of the state currently saved on the server
+  const computeFingerprint = (csv: string, overrides: Record<string, any>, assignments: Record<string, any>) => {
+    try {
+      return `${csv.length}::${JSON.stringify(overrides || {})}::${JSON.stringify(assignments || {})}`;
+    } catch {
+      return '';
+    }
+  };
+  const lastSavedFingerprintRef = useRef<string>('');
+
   // Manual reload / sync from server on demand
   const syncFromServer = async (showNotification = false) => {
     try {
@@ -157,6 +184,11 @@ export default function App() {
           setTableAssignments(s.tableAssignments);
           localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
         }
+        lastSavedFingerprintRef.current = computeFingerprint(
+          (s.csvText && s.csvText.length > 50) ? s.csvText : csvText,
+          s.manualOverrides || manualOverrides,
+          s.tableAssignments || tableAssignments
+        );
         setHasPendingChanges(false);
         setServerStatus('synced');
         const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -168,11 +200,7 @@ export default function App() {
             text: `Base de dades sincronitzada amb èxit a les ${nowStr}.`,
           });
         }
-        console.log('[CLIENT] Dades carregades correctament de la base de dades:', {
-          csvLength: s.csvText?.length,
-          overridesCount: Object.keys(s.manualOverrides || {}).length,
-          assignmentsCount: Object.keys(s.tableAssignments || {}).length,
-        });
+        console.log('[CLIENT] Dades carregades correctament de la base de dades.');
       }
     } catch (err) {
       console.warn('[CLIENT] Error al sincronitzar des del servidor:', err);
@@ -185,7 +213,7 @@ export default function App() {
     }
   };
 
-  // 1. Carrega inicial exclusiva quan l'usuari entra a la pàgina
+  // 1. Càrrega inicial exclusiva quan l'usuari entra a la pàgina
   useEffect(() => {
     let mounted = true;
     console.log('[CLIENT-INIT] Connexió inicial: recuperant estat de Netlify DB...');
@@ -196,18 +224,27 @@ export default function App() {
         if (json.success && json.data) {
           if (json.db) setDbType(json.db);
           const s = json.data;
+          let loadedCsv = csvText;
+          let loadedOverrides = manualOverrides;
+          let loadedAssignments = tableAssignments;
+
           if (s.csvText && s.csvText.length > 50) {
+            loadedCsv = s.csvText;
             setCsvText(s.csvText);
             localStorage.setItem('luma_event_csv', s.csvText);
           }
           if (s.manualOverrides) {
+            loadedOverrides = s.manualOverrides;
             setManualOverrides(s.manualOverrides);
             localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
           }
           if (s.tableAssignments) {
+            loadedAssignments = s.tableAssignments;
             setTableAssignments(s.tableAssignments);
             localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
           }
+
+          lastSavedFingerprintRef.current = computeFingerprint(loadedCsv, loadedOverrides, loadedAssignments);
           const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           setLastServerSyncTime(nowStr);
           setLastServerSaveTime(nowStr);
@@ -228,21 +265,38 @@ export default function App() {
     };
   }, []);
 
-  // Funció per desar canvis a la base de dades amb cua per evitar pèrdues de canvis
+  // Funció per desar canvis a la base de dades amb cua i prevenció de peticions innecessàries
   const saveToServer = async (patch: Record<string, any>, manualTrigger = false) => {
+    const nextCsv = patch.csvText !== undefined ? patch.csvText : csvText;
+    const nextOverrides = patch.manualOverrides !== undefined ? patch.manualOverrides : manualOverrides;
+    const nextAssignments = patch.tableAssignments !== undefined ? patch.tableAssignments : tableAssignments;
+    const nextFingerprint = computeFingerprint(nextCsv, nextOverrides, nextAssignments);
+
+    // Evitem desar si és idèntic al que ja està confirmat i guardat (tret que sigui un clic manual d'usuari)
+    if (!manualTrigger && nextFingerprint === lastSavedFingerprintRef.current) {
+      setHasPendingChanges(false);
+      return;
+    }
+
+    lastSavedFingerprintRef.current = nextFingerprint;
+
     if (isSavingRef.current) {
       pendingSavePatchRef.current = { ...(pendingSavePatchRef.current || {}), ...patch };
       return;
     }
     isSavingRef.current = true;
     setServerStatus('saving');
-    console.log('[CLIENT-SAVE] Enviant canvis a la base de dades:', Object.keys(patch));
+    console.log('[CLIENT-SAVE] Enviant canvis reals a la base de dades:', Object.keys(patch));
 
     try {
+      const clientId = clientIdRef.current;
       const res = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
+        body: JSON.stringify({
+          ...patch,
+          clientId,
+        }),
       });
 
       if (res.ok) {
@@ -256,7 +310,7 @@ export default function App() {
         if (manualTrigger) {
           setStatusMsg({
             type: 'success',
-            text: `Tots els canvis s'han enviat i guardat a la base de dades Netlify (PostgreSQL) a les ${timeStr}!`,
+            text: `Tots els canvis s'han enviat i guardat a la base de dades a les ${timeStr}!`,
           });
         }
       } else {
@@ -276,32 +330,50 @@ export default function App() {
     }
   };
 
-  // Reacció en temps real quan un altre usuari desa (SSE push passiu, NO polling)
+  // Reacció en temps real quan un altre usuari desa (SSE push passiu, NO polling, sense auto-eco)
   useEffect(() => {
     let active = true;
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource('/api/events');
+      const clientId = clientIdRef.current;
+      eventSource = new EventSource(`/api/events?clientId=${encodeURIComponent(clientId)}`);
+      
       eventSource.onmessage = (e) => {
         if (!active) return;
         try {
           const payload = JSON.parse(e.data);
+
+          // Si el missatge prové d'aquesta mateixa pestanya/client, ignorem per evitar bucle
+          if (payload.originClientId && payload.originClientId === clientId) {
+            return;
+          }
+
           if (payload.type === 'update' && payload.data) {
-            // Només actualitzar si no tenim canvis pendents d'enviar per no provocar sobrescriptures
             const s = payload.data;
+            let updatedCsv = csvText;
+            let updatedOverrides = manualOverrides;
+            let updatedAssignments = tableAssignments;
+
             if (s.csvText && s.csvText.length > 50) {
+              updatedCsv = s.csvText;
               setCsvText(s.csvText);
               localStorage.setItem('luma_event_csv', s.csvText);
             }
             if (s.manualOverrides) {
+              updatedOverrides = s.manualOverrides;
               setManualOverrides(s.manualOverrides);
               localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
             }
             if (s.tableAssignments) {
+              updatedAssignments = s.tableAssignments;
               setTableAssignments(s.tableAssignments);
               localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
             }
+
+            // Actualitzem l'empremta perquè l'auto-save no re-enviï el que acabem de rebre del servidor
+            lastSavedFingerprintRef.current = computeFingerprint(updatedCsv, updatedOverrides, updatedAssignments);
             setServerStatus('synced');
+            setHasPendingChanges(false);
             setLastServerSaveTime('En viu (sincronitzat)');
             console.log('[CLIENT-SSE] Rebuts canvis externs en temps real.');
           }
@@ -319,9 +391,17 @@ export default function App() {
     };
   }, []);
 
-  // Enviar canvis automàticament quan es fan modificacions (amb debounce de 800ms)
+  // Enviar canvis automàticament quan es fan modificacions locals (amb debounce prudent de 1.2s i comprovació d'empremta)
   useEffect(() => {
     if (!hasLoadedInitialServerData.current) return;
+
+    const currentFingerprint = computeFingerprint(csvText, manualOverrides, tableAssignments);
+    // Si l'estat actual és idèntic al que ja està guardat al servidor, no cal desar res
+    if (currentFingerprint === lastSavedFingerprintRef.current) {
+      setHasPendingChanges(false);
+      return;
+    }
+
     setHasPendingChanges(true);
     const timer = setTimeout(() => {
       saveToServer({
@@ -329,7 +409,7 @@ export default function App() {
         manualOverrides,
         tableAssignments,
       });
-    }, 800);
+    }, 1200);
     return () => clearTimeout(timer);
   }, [csvText, manualOverrides, tableAssignments]);
 

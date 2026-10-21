@@ -235,13 +235,21 @@ async function startServer() {
   // ==================== API ROUTES ====================
 
   // Clients connected to SSE for real-time live synchronization across all users
-  const sseClients: express.Response[] = [];
+  interface SseClient {
+    res: express.Response;
+    clientId?: string;
+  }
+  const sseClients: SseClient[] = [];
 
-  const notifyAllClients = (updatedData: any) => {
+  const notifyAllClients = (updatedData: any, originClientId?: string) => {
     const payload = `data: ${JSON.stringify(updatedData)}\n\n`;
     for (let i = sseClients.length - 1; i >= 0; i--) {
+      const client = sseClients[i];
+      if (originClientId && client.clientId && client.clientId === originClientId) {
+        continue; // Skip echo back to originating client
+      }
       try {
-        sseClients[i].write(payload);
+        client.res.write(payload);
       } catch {
         sseClients.splice(i, 1);
       }
@@ -258,10 +266,12 @@ async function startServer() {
     // Send initial connected state
     res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
 
-    sseClients.push(res);
+    const clientId = typeof req.query.clientId === 'string' ? req.query.clientId : undefined;
+    const clientEntry: SseClient = { res, clientId };
+    sseClients.push(clientEntry);
 
     req.on('close', () => {
-      const idx = sseClients.indexOf(res);
+      const idx = sseClients.indexOf(clientEntry);
       if (idx !== -1) sseClients.splice(idx, 1);
     });
   });
@@ -307,7 +317,7 @@ async function startServer() {
   // POST /api/data - Update attendees list or changes
   app.post('/api/data', async (req, res) => {
     try {
-      const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt } = req.body;
+      const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt, clientId } = req.body;
       const changesList: string[] = [];
       if (csvText !== undefined) changesList.push(`csvText (${csvText.length} caràcters)`);
       if (manualOverrides !== undefined) changesList.push(`manualOverrides (${Object.keys(manualOverrides).length} canvis)`);
@@ -381,12 +391,13 @@ async function startServer() {
         }
       }
 
-      // Broadcast changes to all open browser sessions in real-time
+      // Broadcast changes to all open browser sessions in real-time (excluding the sender)
       notifyAllClients({
         type: 'update',
+        originClientId: clientId || null,
         updatedAt: stateCache.updatedAt,
         data: stateCache,
-      });
+      }, clientId);
 
       res.json({
         success: true,
