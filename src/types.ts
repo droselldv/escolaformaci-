@@ -31,10 +31,13 @@ export interface DishTotal {
 
 export interface TableGroup {
   tableNumber: number;
+  tableName?: string;
   capacity: number;
   guests: ProcessedGuest[];
   dishCounts: Record<string, number>;
 }
+
+export type TableNamesMap = Record<number, string>;
 
 export interface ManualGuestOverride {
   stays?: boolean;
@@ -59,6 +62,7 @@ export interface EventAnalysis {
   noLunchGuests: ProcessedGuest[];
   unassignedGuests: ProcessedGuest[];
   tables: TableGroup[];
+  tableNames?: Record<number, string>;
   dishTotals: DishTotal[];
   totalRegistered: number;
   totalLunch: number;

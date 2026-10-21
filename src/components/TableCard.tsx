@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TableGroup, ProcessedGuest } from '../types';
 import { formatFullNameSurnamesFirst } from '../lib/sorting';
 import {
@@ -10,6 +10,7 @@ import {
   UserMinus,
   Edit2,
   MoreVertical,
+  X,
 } from 'lucide-react';
 
 interface TableCardProps {
@@ -20,6 +21,7 @@ interface TableCardProps {
   onOpenSwap?: (guest: ProcessedGuest) => void;
   onUnassignGuest?: (guest: ProcessedGuest) => void;
   onOpenAddToSeat?: (tableNumber: number, seatNumber: number) => void;
+  onRenameTable?: (tableNumber: number, newName: string) => void;
 }
 
 export const TableCard: React.FC<TableCardProps> = ({
@@ -30,9 +32,16 @@ export const TableCard: React.FC<TableCardProps> = ({
   onOpenSwap,
   onUnassignGuest,
   onOpenAddToSeat,
+  onRenameTable,
 }) => {
   const [copied, setCopied] = useState(false);
   const [activeMenuGuestId, setActiveMenuGuestId] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState(table.tableName || '');
+
+  useEffect(() => {
+    setTempName(table.tableName || '');
+  }, [table.tableName]);
 
   const carnCount = table.dishCounts['Carn - Cap de llom'] || 0;
   const peixCount = table.dishCounts['Peix - Orada'] || 0;
@@ -106,23 +115,91 @@ export const TableCard: React.FC<TableCardProps> = ({
       }`}
     >
       {/* Table Header */}
-      <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-slate-900 text-sm">Taula {table.tableNumber}</span>
-          <span className="text-slate-300">·</span>
-          <span
-            className={`font-semibold text-[11px] px-2 py-0.5 rounded-full ${
-              freeSeatsCount === 0
-                ? 'bg-slate-200/80 text-slate-700'
-                : 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
-            }`}
+      <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+        {isEditingName ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onRenameTable?.(table.tableNumber, tempName.trim());
+              setIsEditingName(false);
+            }}
+            className="flex items-center gap-1 min-w-0 flex-1 mr-1"
           >
-            {table.guests.length}/{table.capacity} ocupats
-            {freeSeatsCount > 0 ? ` (${freeSeatsCount} lliures)` : ' (completa)'}
-          </span>
-        </div>
+            <span className="font-bold text-slate-900 text-xs shrink-0">Taula {table.tableNumber}:</span>
+            <input
+              type="text"
+              autoFocus
+              value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              placeholder="Ex: Presidència, Urgell..."
+              className="text-xs px-2 py-0.5 border border-blue-400 rounded bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1 min-w-0"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsEditingName(false);
+                  setTempName(table.tableName || '');
+                }
+              }}
+            />
+            <button
+              type="submit"
+              className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition cursor-pointer shrink-0"
+              title="Desar nom"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditingName(false);
+                setTempName(table.tableName || '');
+              }}
+              className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200 transition cursor-pointer shrink-0"
+              title="Cancel·lar"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <span className="font-bold text-slate-900 text-sm whitespace-nowrap">Taula {table.tableNumber}</span>
+            {table.tableName ? (
+              <span
+                onClick={() => {
+                  setTempName(table.tableName || '');
+                  setIsEditingName(true);
+                }}
+                className="font-medium text-slate-700 bg-slate-200/70 hover:bg-slate-300/80 px-1.5 py-0.5 rounded text-xs truncate max-w-[130px] sm:max-w-[150px] cursor-pointer transition"
+                title={`Nom: ${table.tableName} (clic per editar)`}
+              >
+                {table.tableName}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setTempName(table.tableName || '');
+                setIsEditingName(true);
+              }}
+              className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-200/60 transition cursor-pointer shrink-0"
+              title={table.tableName ? "Canviar el nom de la taula" : "Posar un nom a la taula"}
+            >
+              <Edit2 className="w-3 h-3" />
+            </button>
+            <span className="text-slate-300">·</span>
+            <span
+              className={`font-semibold text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 ${
+                freeSeatsCount === 0
+                  ? 'bg-slate-200/80 text-slate-700'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+              }`}
+            >
+              {table.guests.length}/{table.capacity}
+              {freeSeatsCount > 0 ? ` (${freeSeatsCount} ll.)` : ''}
+            </span>
+          </div>
+        )}
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="text-[11px] text-slate-500 flex items-center gap-1.5 hidden sm:flex">
             <span>C: <strong>{carnCount}</strong></span>
             <span>P: <strong>{peixCount}</strong></span>

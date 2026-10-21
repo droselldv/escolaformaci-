@@ -207,7 +207,7 @@ export const EditGuestModal: React.FC<EditGuestModalProps> = ({ guest, tables = 
                     <option value="none">Sense taula (pendent d'assignar)</option>
                     {tables.map(t => (
                       <option key={t.tableNumber} value={t.tableNumber}>
-                        Taula {t.tableNumber} ({t.guests.length}/{t.capacity} ocupats)
+                        Taula {t.tableNumber}{t.tableName ? ` - ${t.tableName}` : ''} ({t.guests.length}/{t.capacity} ocupats)
                       </option>
                     ))}
                     <option value={nextNewTableNum}>+ Nova Taula {nextNewTableNum}</option>

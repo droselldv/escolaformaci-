@@ -213,6 +213,11 @@
     border: 1px solid #cbd5e1 !important;
   }
 
+  .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
   .print-doc-header {
     page-break-after: avoid !important;
     break-after: avoid !important;

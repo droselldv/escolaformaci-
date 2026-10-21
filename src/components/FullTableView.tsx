@@ -14,6 +14,7 @@ import {
   Layers,
   Phone,
   UserPlus,
+  Edit2,
 } from 'lucide-react';
 
 interface FullTableViewProps {
@@ -24,12 +25,14 @@ interface FullTableViewProps {
   onToggleLunchStatus?: (guestId: string) => void;
   onEditGuest?: (guest: ProcessedGuest) => void;
   onOpenAddGuest?: () => void;
+  onRenameTable?: (tableNumber: number, newName: string) => void;
 }
 
 function getColumnValue(
   g: ProcessedGuest,
   colId: AvailableColumnId,
-  onEditGuest?: (g: ProcessedGuest) => void
+  onEditGuest?: (g: ProcessedGuest) => void,
+  tableMap?: Map<number, any>
 ): React.ReactNode {
   switch (colId) {
     case 'name':
@@ -43,7 +46,8 @@ function getColumnValue(
           {formatFullNameSurnamesFirst(g)}
         </button>
       );
-    case 'table':
+    case 'table': {
+      const tName = g.tableNumber ? tableMap?.get(g.tableNumber)?.tableName : undefined;
       return (
         <button
           type="button"
@@ -53,7 +57,7 @@ function getColumnValue(
         >
           {g.tableNumber ? (
             <span className="font-semibold text-blue-700 group-hover:text-blue-900 group-hover:underline">
-              Taula {g.tableNumber}
+              Taula {g.tableNumber}{tName ? ` (${tName})` : ''}
             </span>
           ) : (
             <span className="text-amber-700 font-medium bg-amber-50 group-hover:bg-amber-100 px-1.5 py-0.5 rounded text-[11px] border border-amber-200/60">
@@ -62,6 +66,7 @@ function getColumnValue(
           )}
         </button>
       );
+    }
     case 'seat':
       return <span className="font-mono text-slate-500">{g.seatNumber ?? '-'}</span>;
     case 'first_name':
@@ -117,6 +122,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
   onToggleLunchStatus,
   onEditGuest,
   onOpenAddGuest,
+  onRenameTable,
 }) => {
   const [activeSheet, setActiveSheet] = useState<'sheet1' | 'sheet2' | 'sheet3'>('sheet1');
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,6 +130,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
   const [filterTable, setFilterTable] = useState<string>('all');
 
   const colDefMap = useMemo(() => new Map(ALL_COLUMNS.map(c => [c.id, c])), []);
+  const tableMap = useMemo(() => new Map(analysis.tables.map(t => [t.tableNumber, t])), [analysis.tables]);
 
   // Filter & sort lunch guests
   const processedLunch = useMemo(() => {
@@ -297,7 +304,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                   <option value="all">Totes les taules</option>
                   {analysis.tables.map(t => (
                     <option key={t.tableNumber} value={t.tableNumber}>
-                      Taula {t.tableNumber}
+                      Taula {t.tableNumber}{t.tableName ? ` - ${t.tableName}` : ''}
                     </option>
                   ))}
                 </select>
@@ -335,13 +342,35 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                 tablesGrouped.map(([tNum, guests]) => {
                   const carnCount = guests.filter(g => g.cleanDish.includes('Carn')).length;
                   const peixCount = guests.filter(g => g.cleanDish.includes('Peix')).length;
+                  const tableObj = tableMap.get(tNum);
 
                   return (
                     <div key={tNum} className="pb-1">
                       {/* Table Header */}
                       <div className="bg-slate-50 px-3.5 py-1.5 flex items-center justify-between border-b border-slate-200">
-                        <div className="flex items-center gap-2 text-xs">
+                        <div className="flex items-center gap-2 text-xs flex-wrap">
                           <span className="font-bold text-slate-900">Taula {tNum}</span>
+                          {tableObj?.tableName && (
+                            <span className="bg-slate-200/80 text-slate-700 font-medium px-1.5 py-0.5 rounded text-[11px]">
+                              {tableObj.tableName}
+                            </span>
+                          )}
+                          {onRenameTable && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentName = tableObj?.tableName || '';
+                                const newName = window.prompt(`Canviar nom per a la Taula ${tNum}:`, currentName);
+                                if (newName !== null) {
+                                  onRenameTable(tNum, newName);
+                                }
+                              }}
+                              className="p-0.5 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-200/50 transition cursor-pointer"
+                              title="Canviar el nom d'aquesta taula"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                          )}
                           <span className="text-slate-400">·</span>
                           <span className="text-slate-500 font-medium">{guests.length}/10 assistents</span>
                           <span className="text-slate-400">·</span>
@@ -367,7 +396,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                             <tr key={g.guest_id} className="hover:bg-slate-50/70 transition group">
                               {visibleCols.map(colId => (
                                 <td key={colId} className="py-1.5 px-3 whitespace-nowrap">
-                                  {getColumnValue(g, colId, onEditGuest)}
+                                  {getColumnValue(g, colId, onEditGuest, tableMap)}
                                 </td>
                               ))}
                               <td className="py-1.5 px-3 text-right whitespace-nowrap">
@@ -412,7 +441,7 @@ export const FullTableView: React.FC<FullTableViewProps> = ({
                     <tr key={g.guest_id} className="hover:bg-slate-50/70 transition group">
                       {visibleCols.map(colId => (
                         <td key={colId} className="py-2 px-3 whitespace-nowrap">
-                          {getColumnValue(g, colId, onEditGuest)}
+                          {getColumnValue(g, colId, onEditGuest, tableMap)}
                         </td>
                       ))}
                       <td className="py-2 px-3 text-right whitespace-nowrap">

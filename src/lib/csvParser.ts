@@ -243,7 +243,8 @@ export function processGuests(
   rawGuests: RawLumaGuest[],
   sortMode: 'chronological' | 'original' = 'chronological',
   tableSize = 10,
-  tableAssignments: TableAssignmentsMap = {}
+  tableAssignments: TableAssignmentsMap = {},
+  tableNames: Record<number, string> = {}
 ): EventAnalysis {
   // Clone array
   let sorted = [...rawGuests];
@@ -426,6 +427,7 @@ export function processGuests(
 
     return {
       tableNumber: tableNum,
+      tableName: tableNames[tableNum] || '',
       capacity: Math.max(tableSize, rawSeats.length),
       guests: tableGuests,
       dishCounts,
@@ -452,6 +454,7 @@ export function processGuests(
     noLunchGuests,
     unassignedGuests,
     tables,
+    tableNames,
     dishTotals,
     totalRegistered: rawGuests.length,
     totalLunch: lunchGuests.length,

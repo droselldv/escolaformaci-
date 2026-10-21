@@ -94,6 +94,20 @@ export default function App() {
     }
   });
 
+  // Custom table names/labels state (e.g. { 1: "Presidència", 2: "Joves" })
+  const [tableNames, setTableNames] = useState<Record<number, string>>(() => {
+    try {
+      const saved = localStorage.getItem('luma_table_names');
+      if (saved) return JSON.parse(saved);
+      const savedOverrides = localStorage.getItem('luma_event_overrides');
+      if (savedOverrides) {
+        const parsed = JSON.parse(savedOverrides);
+        if (parsed['__table_names__']) return parsed['__table_names__'];
+      }
+    } catch {}
+    return {};
+  });
+
   // 2. Custom Export & Display Options State
   const [exportOptions, setExportOptions] = useState<CustomExportOptions>(() => {
     try {
@@ -154,9 +168,14 @@ export default function App() {
   );
 
   // Fingerprint tracker of the state currently saved on the server
-  const computeFingerprint = (csv: string, overrides: Record<string, any>, assignments: Record<string, any>) => {
+  const computeFingerprint = (
+    csv: string,
+    overrides: Record<string, any>,
+    assignments: Record<string, any>,
+    tNames?: Record<number, string>
+  ) => {
     try {
-      return `${csv.length}::${JSON.stringify(overrides || {})}::${JSON.stringify(assignments || {})}`;
+      return `${csv.length}::${JSON.stringify(overrides || {})}::${JSON.stringify(assignments || {})}::${JSON.stringify(tNames || {})}`;
     } catch {
       return '';
     }
@@ -207,8 +226,15 @@ export default function App() {
           localStorage.setItem('luma_event_csv', s.csvText);
         }
         if (s.manualOverrides) {
+          if (s.manualOverrides['__table_names__']) {
+            setTableNames(s.manualOverrides['__table_names__']);
+            localStorage.setItem('luma_table_names', JSON.stringify(s.manualOverrides['__table_names__']));
+          }
           setManualOverrides(s.manualOverrides);
           localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+        } else if (s.tableNames) {
+          setTableNames(s.tableNames);
+          localStorage.setItem('luma_table_names', JSON.stringify(s.tableNames));
         }
         if (s.tableAssignments) {
           setTableAssignments(s.tableAssignments);
@@ -217,7 +243,8 @@ export default function App() {
         lastSavedFingerprintRef.current = computeFingerprint(
           (s.csvText && s.csvText.length > 50) ? s.csvText : csvText,
           s.manualOverrides || manualOverrides,
-          s.tableAssignments || tableAssignments
+          s.tableAssignments || tableAssignments,
+          (s.manualOverrides && s.manualOverrides['__table_names__']) || s.tableNames || tableNames
         );
         setHasPendingChanges(false);
         setServerStatus('synced');
@@ -307,9 +334,16 @@ export default function App() {
           localStorage.setItem('luma_event_csv', s.csvText);
         }
         if (s.manualOverrides) {
+          if (s.manualOverrides['__table_names__']) {
+            setTableNames(s.manualOverrides['__table_names__']);
+            localStorage.setItem('luma_table_names', JSON.stringify(s.manualOverrides['__table_names__']));
+          }
           loadedOverrides = s.manualOverrides;
           setManualOverrides(s.manualOverrides);
           localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+        } else if (s.tableNames) {
+          setTableNames(s.tableNames);
+          localStorage.setItem('luma_table_names', JSON.stringify(s.tableNames));
         }
         // Només carreguem assignacions si el servidor en té més o si l'usuari no en té de pendents
         if (s.tableAssignments && (!hasExistingLocalAssignments || Object.keys(s.tableAssignments).length >= Object.keys(tableAssignments).length)) {
@@ -318,7 +352,12 @@ export default function App() {
           localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
         }
 
-        lastSavedFingerprintRef.current = computeFingerprint(loadedCsv, loadedOverrides, loadedAssignments);
+        lastSavedFingerprintRef.current = computeFingerprint(
+          loadedCsv,
+          loadedOverrides,
+          loadedAssignments,
+          (s.manualOverrides && s.manualOverrides['__table_names__']) || s.tableNames || tableNames
+        );
         const nowStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLastServerSyncTime(nowStr);
         setLastServerSaveTime(nowStr);
@@ -347,11 +386,16 @@ export default function App() {
         text: 'Pujant tots els canvis locals a Supabase...',
       });
 
+      const finalOverrides = {
+        ...manualOverrides,
+        ['__table_names__']: tableNames,
+      };
+
       // Primer provem Supabase directament (100% garantit per HTTPS)
       const { error: sbErr } = await supabase.from('event_state').upsert({
         id: 'default',
         csv_text: csvText,
-        manual_overrides: manualOverrides,
+        manual_overrides: finalOverrides,
         table_assignments: tableAssignments,
         updated_at: new Date().toISOString()
       });
@@ -362,7 +406,7 @@ export default function App() {
         setHasPendingChanges(false);
         const timeStr = new Date().toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLastServerSaveTime(timeStr);
-        lastSavedFingerprintRef.current = computeFingerprint(csvText, manualOverrides, tableAssignments);
+        lastSavedFingerprintRef.current = computeFingerprint(csvText, finalOverrides, tableAssignments, tableNames);
         setStatusMsg({
           type: 'success',
           text: `✅ Tots els canvis locals s'han pujat i guardat a la base de dades a les ${timeStr}!`,
@@ -374,8 +418,9 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             csvText,
-            manualOverrides,
+            manualOverrides: finalOverrides,
             tableAssignments,
+            tableNames,
             clientId: clientIdRef.current,
           }),
         }).catch(() => {});
@@ -384,16 +429,21 @@ export default function App() {
       }
     } catch (err: any) {
       console.warn('[UPLOAD-LOCAL] Error pujant directe a Supabase, intentant servidor:', err);
-      saveToServer({ csvText, manualOverrides, tableAssignments }, true);
+      saveToServer({ csvText, manualOverrides, tableAssignments, tableNames }, true);
     }
   };
 
   // Funció per desar canvis a la base de dades amb cua i prevenció de peticions innecessàries
   const saveToServer = async (patch: Record<string, any>, manualTrigger = false) => {
     const nextCsv = patch.csvText !== undefined ? patch.csvText : csvText;
-    const nextOverrides = patch.manualOverrides !== undefined ? patch.manualOverrides : manualOverrides;
+    const baseOverrides = patch.manualOverrides !== undefined ? patch.manualOverrides : manualOverrides;
     const nextAssignments = patch.tableAssignments !== undefined ? patch.tableAssignments : tableAssignments;
-    const nextFingerprint = computeFingerprint(nextCsv, nextOverrides, nextAssignments);
+    const nextTableNames = patch.tableNames !== undefined ? patch.tableNames : tableNames;
+    const nextOverrides = {
+      ...baseOverrides,
+      ['__table_names__']: nextTableNames,
+    };
+    const nextFingerprint = computeFingerprint(nextCsv, nextOverrides, nextAssignments, nextTableNames);
 
     // Evitem desar si és idèntic al que ja està confirmat i guardat (tret que sigui un clic manual d'usuari)
     if (!manualTrigger && nextFingerprint === lastSavedFingerprintRef.current) {
@@ -512,9 +562,16 @@ export default function App() {
               localStorage.setItem('luma_event_csv', s.csvText);
             }
             if (s.manualOverrides) {
+              if (s.manualOverrides['__table_names__']) {
+                setTableNames(s.manualOverrides['__table_names__']);
+                localStorage.setItem('luma_table_names', JSON.stringify(s.manualOverrides['__table_names__']));
+              }
               updatedOverrides = s.manualOverrides;
               setManualOverrides(s.manualOverrides);
               localStorage.setItem('luma_event_overrides', JSON.stringify(s.manualOverrides));
+            } else if (s.tableNames) {
+              setTableNames(s.tableNames);
+              localStorage.setItem('luma_table_names', JSON.stringify(s.tableNames));
             }
             if (s.tableAssignments) {
               updatedAssignments = s.tableAssignments;
@@ -523,7 +580,12 @@ export default function App() {
             }
 
             // Actualitzem l'empremta perquè l'auto-save no re-enviï el que acabem de rebre del servidor
-            lastSavedFingerprintRef.current = computeFingerprint(updatedCsv, updatedOverrides, updatedAssignments);
+            lastSavedFingerprintRef.current = computeFingerprint(
+              updatedCsv,
+              updatedOverrides,
+              updatedAssignments,
+              (s.manualOverrides && s.manualOverrides['__table_names__']) || s.tableNames || tableNames
+            );
             setServerStatus('synced');
             setHasPendingChanges(false);
             setLastServerSaveTime('En viu (sincronitzat)');
@@ -547,7 +609,7 @@ export default function App() {
   useEffect(() => {
     if (!hasLoadedInitialServerData.current) return;
 
-    const currentFingerprint = computeFingerprint(csvText, manualOverrides, tableAssignments);
+    const currentFingerprint = computeFingerprint(csvText, manualOverrides, tableAssignments, tableNames);
     // Si l'estat actual és idèntic al que ja està guardat al servidor, no cal desar res
     if (currentFingerprint === lastSavedFingerprintRef.current) {
       setHasPendingChanges(false);
@@ -560,10 +622,11 @@ export default function App() {
         csvText,
         manualOverrides,
         tableAssignments,
+        tableNames,
       });
     }, 1200);
     return () => clearTimeout(timer);
-  }, [csvText, manualOverrides, tableAssignments]);
+  }, [csvText, manualOverrides, tableAssignments, tableNames]);
 
   // Local storage persistence
   useEffect(() => {
@@ -577,6 +640,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('luma_table_assignments', JSON.stringify(tableAssignments));
   }, [tableAssignments]);
+
+  useEffect(() => {
+    localStorage.setItem('luma_table_names', JSON.stringify(tableNames));
+  }, [tableNames]);
 
   useEffect(() => {
     localStorage.setItem('luma_export_options_v4', JSON.stringify(exportOptions));
@@ -628,8 +695,8 @@ export default function App() {
       return res;
     });
 
-    return processGuests(modifiedRaw, sortMode, 10, tableAssignments);
-  }, [rawGuests, sortMode, manualOverrides, tableAssignments]);
+    return processGuests(modifiedRaw, sortMode, 10, tableAssignments, tableNames);
+  }, [rawGuests, sortMode, manualOverrides, tableAssignments, tableNames]);
 
   // ==================== TABLE ASSIGNMENT OPERATIONS ====================
 
@@ -777,6 +844,45 @@ export default function App() {
         seatNumber: 1,
       });
     }
+  };
+
+  /**
+   * Change custom name of a table
+   */
+  const handleRenameTable = (tableNumber: number, newName: string) => {
+    const nextTableNames: Record<number, string> = { ...tableNames };
+    const cleanName = newName.trim();
+    if (!cleanName) {
+      delete nextTableNames[tableNumber];
+    } else {
+      nextTableNames[tableNumber] = cleanName;
+    }
+
+    setTableNames(nextTableNames);
+    localStorage.setItem('luma_table_names', JSON.stringify(nextTableNames));
+
+    const nextOverrides: ManualOverridesMap = {
+      ...manualOverrides,
+      ['__table_names__']: nextTableNames as any,
+    };
+    setManualOverrides(nextOverrides);
+
+    saveToServer(
+      {
+        csvText,
+        manualOverrides: nextOverrides,
+        tableAssignments,
+        tableNames: nextTableNames,
+      },
+      true
+    );
+
+    setStatusMsg({
+      type: 'success',
+      text: cleanName
+        ? `S'ha canviat el nom de la Taula ${tableNumber} a "${cleanName}".`
+        : `S'ha suprimit el nom personalitzat de la Taula ${tableNumber}.`,
+    });
   };
 
   // Export Local Excel
@@ -1271,6 +1377,7 @@ export default function App() {
                   onOpenAddToSeat={(tableNumber, seatNumber) =>
                     setTableModalMode({ type: 'add_to_seat', tableNumber, seatNumber })
                   }
+                  onRenameTable={handleRenameTable}
                 />
               ))}
             </div>
@@ -1287,6 +1394,7 @@ export default function App() {
             onToggleLunchStatus={handleToggleLunchStatus}
             onEditGuest={guest => setEditingGuest(guest)}
             onOpenAddGuest={() => setIsAddGuestOpen(true)}
+            onRenameTable={handleRenameTable}
           />
         )}
       </main>

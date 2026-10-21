@@ -207,7 +207,7 @@ export const AddGuestModal: React.FC<AddGuestModalProps> = ({
                       const count = t.guests.length;
                       return (
                         <option key={t.tableNumber} value={t.tableNumber}>
-                          Taula {t.tableNumber} ({count}/10 {count >= 10 ? 'plena' : 'places'})
+                          Taula {t.tableNumber}{t.tableName ? ` - ${t.tableName}` : ''} ({count}/10 {count >= 10 ? 'plena' : 'places'})
                         </option>
                       );
                     })}

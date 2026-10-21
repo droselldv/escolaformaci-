@@ -182,7 +182,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                             : 'border-slate-200 hover:border-slate-400 bg-white'
                         }`}
                       >
-                        <span className="font-bold text-xs">Taula {t.tableNumber}</span>
+                        <span className="font-bold text-xs">Taula {t.tableNumber}{t.tableName ? ` (${t.tableName})` : ''}</span>
                         <span
                           className={`text-[10px] mt-0.5 ${
                             isSelected ? 'text-slate-300' : 'text-slate-500'
@@ -486,7 +486,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                             : 'border-slate-200 hover:border-slate-400 bg-white'
                         }`}
                       >
-                        <span className="font-bold text-xs">Taula {t.tableNumber}</span>
+                        <span className="font-bold text-xs">Taula {t.tableNumber}{t.tableName ? ` (${t.tableName})` : ''}</span>
                         <span
                           className={`text-[10px] mt-0.5 ${
                             isSelected ? 'text-slate-300' : freeSeats > 0 ? 'text-emerald-600 font-medium' : 'text-slate-500'

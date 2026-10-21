@@ -18,11 +18,12 @@ const DEFAULT_OVERRIDES = {
 };
 
 // Global cache across serverless warm invocations
-let memoryState = {
+let memoryState: any = {
   csvText: INITIAL_LUMA_CSV,
   updatedAt: new Date().toISOString(),
   manualOverrides: { ...DEFAULT_OVERRIDES },
   tableAssignments: {},
+  tableNames: {},
   spreadsheetId: null,
   spreadsheetUrl: null,
   lastSyncedAt: null,
@@ -71,6 +72,7 @@ export default async function handler(req: any, res: any) {
             csvText: row.csv_text || memoryState.csvText,
             updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : memoryState.updatedAt,
             manualOverrides: row.manual_overrides || memoryState.manualOverrides,
+            tableNames: (row.manual_overrides && row.manual_overrides['__table_names__']) || memoryState.tableNames || {},
             tableAssignments: sanitizeTableAssignments(row.table_assignments || memoryState.tableAssignments),
             spreadsheetId: row.spreadsheet_id || memoryState.spreadsheetId,
             spreadsheetUrl: row.spreadsheet_url || memoryState.spreadsheetUrl,
@@ -92,10 +94,15 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const { csvText, manualOverrides, tableAssignments, spreadsheetId, spreadsheetUrl, lastSyncedAt } = body;
+      const { csvText, manualOverrides, tableAssignments, tableNames, spreadsheetId, spreadsheetUrl, lastSyncedAt } = body;
 
       if (csvText !== undefined) memoryState.csvText = csvText;
       if (manualOverrides !== undefined) memoryState.manualOverrides = manualOverrides;
+      if (tableNames !== undefined) {
+        memoryState.tableNames = tableNames;
+        if (!memoryState.manualOverrides) memoryState.manualOverrides = {};
+        memoryState.manualOverrides['__table_names__'] = tableNames;
+      }
       if (tableAssignments !== undefined) {
         memoryState.tableAssignments = sanitizeTableAssignments(tableAssignments);
       }

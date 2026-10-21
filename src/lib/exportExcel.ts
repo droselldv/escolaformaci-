@@ -11,10 +11,17 @@ export const DEFAULT_EXPORT_OPTIONS: CustomExportOptions = {
   includeKitchenSummarySheet: true,
 };
 
-function getGuestColumnValue(g: ProcessedGuest, col: AvailableColumnId): string | number {
+function getGuestColumnValue(
+  g: ProcessedGuest,
+  col: AvailableColumnId,
+  tableNames?: Record<number, string>
+): string | number {
   switch (col) {
-    case 'table':
-      return g.tableNumber ? `Taula ${g.tableNumber}` : 'Sense taula';
+    case 'table': {
+      if (!g.tableNumber) return 'Sense taula';
+      const tName = tableNames?.[g.tableNumber];
+      return tName ? `Taula ${g.tableNumber} (${tName})` : `Taula ${g.tableNumber}`;
+    }
     case 'seat':
       return g.seatNumber ?? '-';
     case 'name':
@@ -77,19 +84,19 @@ export function generateExcelWorkbook(
       tableNumbers.forEach(tNum => {
         const tableMembers = sortedLunch.filter(g => g.tableNumber === tNum);
         tableMembers.forEach(g => {
-          sheet1Data.push(selectedCols.map(col => getGuestColumnValue(g, col)));
+          sheet1Data.push(selectedCols.map(col => getGuestColumnValue(g, col, analysis.tableNames)));
         });
       });
     } else {
       // Show sorted list with table indicators
       sortedLunch.forEach(g => {
-        sheet1Data.push(selectedCols.map(col => getGuestColumnValue(g, col)));
+        sheet1Data.push(selectedCols.map(col => getGuestColumnValue(g, col, analysis.tableNames)));
       });
     }
   } else {
     // Continuous flat list (e.g. purely alphabetical for check-in desk)
     sortedLunch.forEach(g => {
-      sheet1Data.push(selectedCols.map(col => getGuestColumnValue(g, col)));
+      sheet1Data.push(selectedCols.map(col => getGuestColumnValue(g, col, analysis.tableNames)));
     });
   }
 
@@ -175,7 +182,7 @@ export function generateExcelWorkbook(
       const guestNames = t.guests.map(g => `${g.name} (${g.cleanDish})`).join('; ');
 
       sheet3Data.push([
-        `Taula ${t.tableNumber}`,
+        `Taula ${t.tableNumber}${t.tableName ? ` (${t.tableName})` : ''}`,
         total,
         carn,
         peix,
