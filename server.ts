@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import postgres from 'postgres';
-import { INITIAL_LUMA_CSV } from './src/data/initialData.ts';
+import { INITIAL_LUMA_CSV, INITIAL_TABLE_ASSIGNMENTS } from './src/data/initialData.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,22 +38,21 @@ let sql: any = null;
 try {
   sql = postgres(DB_URL, {
     ssl: 'require',
-    max: 10,
-    idle_timeout: 20,
-    connect_timeout: 10,
+    max: 5,
+    idle_timeout: 30,
+    connect_timeout: 30,
   });
   console.log('Connected to Supabase (PostgreSQL)!');
 } catch (dbErr) {
-  console.warn('Database initialization with DB_URL failed, falling back to default:', dbErr);
+  console.log('Supabase connection setup, falling back to default:', dbErr);
   try {
     sql = postgres(DEFAULT_SUPABASE_URL, {
       ssl: 'require',
-      max: 10,
-      idle_timeout: 20,
-      connect_timeout: 10,
+      max: 5,
+      idle_timeout: 30,
+      connect_timeout: 30,
     });
-  } catch (err2) {
-    console.error('Fatal Database initialization error:', err2);
+  } catch {
     sql = null;
   }
 }
@@ -68,8 +67,8 @@ try {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-} catch (e) {
-  console.warn('Could not create data dir, fallback to memory/temp:', e);
+} catch {
+  // fallback to memory/temp
 }
 
 const DEFAULT_OVERRIDES = {
@@ -120,8 +119,8 @@ try {
     fs.writeFileSync(CSV_FILE, stateCache.csvText, 'utf-8');
     console.log('[DISK-INIT] Seeded event data file with initial dataset.');
   }
-} catch (err) {
-  console.warn('[DISK-INIT] Failed reading from data file, using memory cache:', err);
+} catch {
+  // fallback to memory
 }
 
 function sanitizeTableAssignments(raw: any): Record<string, { tableNumber: number | null; seatNumber?: number | null }> {
@@ -147,49 +146,56 @@ function sanitizeTableAssignments(raw: any): Record<string, { tableNumber: numbe
   return clean;
 }
 
-// Load initial state from Supabase on startup if available
+// Load initial state from Supabase on startup if available with retry
 async function loadFromDbOnInit() {
   if (!sql) return;
-  try {
-    console.log('[DB-INIT] Checking existing event state in Supabase...');
-    await sql`
-      CREATE TABLE IF NOT EXISTS event_state (
-        id TEXT PRIMARY KEY,
-        csv_text TEXT,
-        manual_overrides JSONB,
-        table_assignments JSONB,
-        spreadsheet_id TEXT,
-        spreadsheet_url TEXT,
-        last_synced_at TEXT,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `;
-    const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
-    if (rows && rows.length > 0) {
-      const row = rows[0];
-      const dbCsvLen = (row.csv_text || '').length;
-      console.log(`[DB-INIT] Found existing row in Supabase (CSV length: ${dbCsvLen}, updated_at: ${row.updated_at})`);
-      const sanitizedAssignments = sanitizeTableAssignments(row.table_assignments);
-      stateCache = {
-        csvText: row.csv_text && row.csv_text.length > 50 ? row.csv_text : stateCache.csvText,
-        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
-        manualOverrides: row.manual_overrides || stateCache.manualOverrides,
-        tableAssignments: sanitizedAssignments,
-        spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
-        spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
-        lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
-      };
-      persistState();
-    } else {
-      console.log('[DB-INIT] No event_state row found in Netlify DB. Seeding initial row...');
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`[DB-INIT] Connectant amb Supabase (intent ${attempt}/3)...`);
       await sql`
-        INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, updated_at)
-        VALUES ('default', ${stateCache.csvText}, ${JSON.stringify(stateCache.manualOverrides)}, ${JSON.stringify(stateCache.tableAssignments)}, NOW())
-        ON CONFLICT (id) DO NOTHING;
+        CREATE TABLE IF NOT EXISTS event_state (
+          id TEXT PRIMARY KEY,
+          csv_text TEXT,
+          manual_overrides JSONB,
+          table_assignments JSONB,
+          spreadsheet_id TEXT,
+          spreadsheet_url TEXT,
+          last_synced_at TEXT,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
       `;
+      const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
+      if (rows && rows.length > 0) {
+        const row = rows[0];
+        const dbCsvLen = (row.csv_text || '').length;
+        console.log(`[DB-INIT] Dades sincronitzades de Supabase amb èxit (${dbCsvLen} caràcters).`);
+        const sanitizedAssignments = sanitizeTableAssignments(row.table_assignments);
+        stateCache = {
+          csvText: row.csv_text && row.csv_text.length > 50 ? row.csv_text : stateCache.csvText,
+          updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
+          manualOverrides: row.manual_overrides || stateCache.manualOverrides,
+          tableAssignments: sanitizedAssignments,
+          spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
+          spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
+          lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
+        };
+        persistState();
+      } else {
+        await sql`
+          INSERT INTO event_state (id, csv_text, manual_overrides, table_assignments, updated_at)
+          VALUES ('default', ${stateCache.csvText}, ${JSON.stringify(stateCache.manualOverrides)}, ${JSON.stringify(stateCache.tableAssignments)}, NOW())
+          ON CONFLICT (id) DO NOTHING;
+        `;
+      }
+      return;
+    } catch (err: any) {
+      if (attempt < 3) {
+        console.log(`[DB-INIT] Intent ${attempt} fallat (${err.message || 'timeout'}). Reintentant en 2s...`);
+        await new Promise((r) => setTimeout(r, 2000));
+      } else {
+        console.log('[DB-INIT] Supabase en repòs o no accessible directament; utilitzant dades locals persistides.');
+      }
     }
-  } catch (err) {
-    console.warn('[DB-INIT] Error during initial DB load/creation:', err);
   }
 }
 
@@ -273,22 +279,24 @@ async function startServer() {
     try {
       console.log('[API GET /api/data] Sol·licitud rebuda de sincronització inicial.');
       if (sql) {
-        // Query Netlify Database
-        const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
-        if (rows && rows.length > 0) {
-          const row = rows[0];
-          console.log(`[API GET /api/data] S'han recuperat dades de Netlify DB (updated_at: ${row.updated_at}, len: ${(row.csv_text || '').length})`);
-          stateCache = {
-            csvText: row.csv_text || stateCache.csvText,
-            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
-            manualOverrides: row.manual_overrides || stateCache.manualOverrides,
-            tableAssignments: row.table_assignments || stateCache.tableAssignments,
-            spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
-            spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
-            lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
-          };
-        } else {
-          console.log('[API GET /api/data] No hi ha files a Netlify DB, retornant memòria/disc.');
+        try {
+          const fetchPromise = sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
+          const rows: any = await Promise.race([fetchPromise, timeoutPromise]);
+          if (rows && rows.length > 0) {
+            const row = rows[0];
+            stateCache = {
+              csvText: row.csv_text || stateCache.csvText,
+              updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : stateCache.updatedAt,
+              manualOverrides: row.manual_overrides || stateCache.manualOverrides,
+              tableAssignments: sanitizeTableAssignments(row.table_assignments || stateCache.tableAssignments),
+              spreadsheetId: row.spreadsheet_id || stateCache.spreadsheetId,
+              spreadsheetUrl: row.spreadsheet_url || stateCache.spreadsheetUrl,
+              lastSyncedAt: row.last_synced_at || stateCache.lastSyncedAt,
+            };
+          }
+        } catch {
+          // Rapid fallback to memory cache if network has latency
         }
       }
       res.json({
@@ -462,17 +470,17 @@ async function startServer() {
   // POST /api/reset-tables - Reset only table assignments back to default chronological tables
   app.post('/api/reset-tables', async (_req, res) => {
     try {
-      console.log('[API POST /api/reset-tables] Restablint taules per defecte.');
-      stateCache.tableAssignments = {};
+      console.log('[API POST /api/reset-tables] Restablint taules oficials per defecte.');
+      stateCache.tableAssignments = { ...INITIAL_TABLE_ASSIGNMENTS };
       stateCache.updatedAt = new Date().toISOString();
       persistState();
       if (sql) {
         try {
           await sql`
-            UPDATE event_state SET table_assignments = '{}'::jsonb, updated_at = NOW() WHERE id = 'default';
+            UPDATE event_state SET table_assignments = ${JSON.stringify(INITIAL_TABLE_ASSIGNMENTS)}::jsonb, updated_at = NOW() WHERE id = 'default';
           `;
         } catch (dbErr) {
-          console.warn('[API reset-tables] Error actualitzant Netlify DB:', dbErr);
+          console.warn('[API reset-tables] Error actualitzant Supabase:', dbErr);
         }
       }
       notifyAllClients({

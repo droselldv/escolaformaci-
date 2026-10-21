@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { INITIAL_LUMA_CSV } from './data/initialData';
+import { INITIAL_LUMA_CSV, INITIAL_TABLE_ASSIGNMENTS } from './data/initialData';
 import { parseLumaCSV, processGuests } from './lib/csvParser';
 import { downloadExcelFile, DEFAULT_EXPORT_OPTIONS } from './lib/exportExcel';
 import {
@@ -88,9 +88,9 @@ export default function App() {
   const [tableAssignments, setTableAssignments] = useState<TableAssignmentsMap>(() => {
     try {
       const saved = localStorage.getItem('luma_table_assignments');
-      return saved ? JSON.parse(saved) : {};
+      return saved ? JSON.parse(saved) : INITIAL_TABLE_ASSIGNMENTS;
     } catch {
-      return {};
+      return INITIAL_TABLE_ASSIGNMENTS;
     }
   });
 
@@ -467,8 +467,10 @@ export default function App() {
               ? override.last_name
               : override.name.split(' ').slice(1).join(' ') || '';
         }
-        if (override.stays !== undefined) {
-          res.dish_raw = override.stays ? (override.dish || 'Carn - Cap de llom') : 'No em quedo al dinar';
+        if (override.stays === false) {
+          res.dish_raw = 'No em quedo al dinar';
+        } else if (override.dish && override.dish.trim()) {
+          res.dish_raw = override.dish.trim();
         }
       }
       return res;
@@ -580,19 +582,19 @@ export default function App() {
    * Reset all tables back to initial chronological layout
    */
   const handleResetTables = async () => {
-    if (!window.confirm("Vols restablir totes les taules a la distribució inicial? Es mantindran tots els canvis de noms i plats.")) {
+    if (!window.confirm("Vols restablir totes les taules a la distribució oficial per defecte?")) {
       return;
     }
-    setTableAssignments({});
+    setTableAssignments(INITIAL_TABLE_ASSIGNMENTS);
     try {
       await fetch('/api/reset-tables', { method: 'POST' });
     } catch {
       // ignore
     }
-    saveToServer({ csvText, manualOverrides, tableAssignments: {} }, true);
+    saveToServer({ csvText, manualOverrides, tableAssignments: INITIAL_TABLE_ASSIGNMENTS }, true);
     setStatusMsg({
       type: 'success',
-      text: "Les taules s'han restablert a la distribució cronològica inicial de 10 en 10.",
+      text: "Les taules s'han restablert a la distribució oficial de les 27 taules de 10 comensals.",
     });
   };
 

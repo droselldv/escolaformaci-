@@ -60,7 +60,9 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     try {
       if (sql) {
-        const rows = await sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
+        const fetchPromise = sql`SELECT * FROM event_state WHERE id = 'default' LIMIT 1;`;
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
+        const rows: any = await Promise.race([fetchPromise, timeoutPromise]);
         if (rows && rows.length > 0) {
           const row = rows[0];
           memoryState = {
@@ -74,8 +76,8 @@ export default async function handler(req: any, res: any) {
           };
         }
       }
-    } catch (dbErr) {
-      console.warn('[Vercel API GET /api/data] DB fetch warning:', dbErr);
+    } catch {
+      // Graceful fallback to memory/cache
     }
 
     return res.status(200).json({

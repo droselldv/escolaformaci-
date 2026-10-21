@@ -1,4 +1,5 @@
 import { getSql } from './_db';
+import { INITIAL_TABLE_ASSIGNMENTS } from '../src/data/initialData';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -23,7 +24,7 @@ export default async function handler(req: any, res: any) {
     if (sql) {
       await sql`
         UPDATE event_state 
-        SET table_assignments = '{}'::jsonb, updated_at = NOW() 
+        SET table_assignments = ${JSON.stringify(INITIAL_TABLE_ASSIGNMENTS)}, updated_at = NOW() 
         WHERE id = 'default';
       `;
     }
