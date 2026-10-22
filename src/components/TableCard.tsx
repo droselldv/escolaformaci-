@@ -436,26 +436,30 @@ export const TableCard: React.FC<TableCardProps> = ({
         })}
       </div>
 
-      {/* Card Footer if empty seats */}
-      {freeSeatsCount > 0 && (
-        <div className="px-3 py-1.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-[11px]">
+      {/* Card Footer - Always allow adding a guest even if full */}
+      <div className="px-3 py-1.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-[11px]">
+        {freeSeatsCount > 0 ? (
           <span className="text-slate-500 font-medium">
             {freeSeatsCount} {freeSeatsCount === 1 ? 'seient disponible' : 'seients disponibles'}
           </span>
-          <button
-            type="button"
-            onClick={() => {
-              // Find first empty seat
-              const firstEmpty = seatsArray.find(s => s.guest === null);
-              onOpenAddToSeat?.(table.tableNumber, firstEmpty ? firstEmpty.seatNumber : table.guests.length + 1);
-            }}
-            className="text-blue-700 hover:text-blue-900 font-medium flex items-center gap-1 hover:underline cursor-pointer"
-          >
-            <UserPlus className="w-3 h-3" />
-            <span>Afegir comensal</span>
-          </button>
-        </div>
-      )}
+        ) : (
+          <span className="text-slate-500 font-medium">
+            {table.guests.length} comensals (Completa)
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            // Find first empty seat or next seat
+            const firstEmpty = seatsArray.find(s => s.guest === null);
+            onOpenAddToSeat?.(table.tableNumber, firstEmpty ? firstEmpty.seatNumber : table.guests.length + 1);
+          }}
+          className="text-blue-700 hover:text-blue-900 font-medium flex items-center gap-1 hover:underline cursor-pointer"
+        >
+          <UserPlus className="w-3 h-3" />
+          <span>{freeSeatsCount > 0 ? 'Afegir comensal' : '+ Afegir extra'}</span>
+        </button>
+      </div>
     </div>
   );
 };

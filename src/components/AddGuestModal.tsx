@@ -62,7 +62,7 @@ export const AddGuestModal: React.FC<AddGuestModalProps> = ({
           break;
         }
       }
-      if (!finalSeat) finalSeat = 1;
+      if (!finalSeat) finalSeat = Math.max(10, occupiedSeats.size) + 1;
     }
 
     onAddGuest({
@@ -207,7 +207,7 @@ export const AddGuestModal: React.FC<AddGuestModalProps> = ({
                       const count = t.guests.length;
                       return (
                         <option key={t.tableNumber} value={t.tableNumber}>
-                          Taula {t.tableNumber}{t.tableName ? ` - ${t.tableName}` : ''} ({count}/10 {count >= 10 ? 'plena' : 'places'})
+                          Taula {t.tableNumber}{t.tableName ? ` - ${t.tableName}` : ''} ({count} comensals)
                         </option>
                       );
                     })}
@@ -217,7 +217,7 @@ export const AddGuestModal: React.FC<AddGuestModalProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-800 mb-1">
-                    Seient (1-10)
+                    Seient
                   </label>
                   <select
                     value={selectedSeat ?? ''}
@@ -225,12 +225,16 @@ export const AddGuestModal: React.FC<AddGuestModalProps> = ({
                     onChange={e => setSelectedSeat(e.target.value ? Number(e.target.value) : null)}
                     className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-slate-100"
                   >
-                    <option value="">Automàtic (primer lliure)</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => {
+                    <option value="">Automàtic (primer lliure o nou seient extra)</option>
+                    {Array.from(
+                      { length: Math.max(10, ((tables.find(t => t.tableNumber === selectedTable)?.guests.length || 0) + 1)) },
+                      (_, i) => i + 1
+                    ).map(s => {
                       const isOccupied = occupiedSeats.has(s);
+                      const isExtra = s > 10;
                       return (
                         <option key={s} value={s}>
-                          Seient {s} {isOccupied ? '(ocupat)' : '(lliure)'}
+                          Seient #{s} {isOccupied ? '(ocupat)' : isExtra ? '(+ seient extra)' : '(lliure)'}
                         </option>
                       );
                     })}

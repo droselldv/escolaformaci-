@@ -188,7 +188,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                             isSelected ? 'text-slate-300' : 'text-slate-500'
                           }`}
                         >
-                          {t.guests.length}/{t.capacity} ocupats ({freeSeats} lliures)
+                          {t.guests.length} comensals {freeSeats > 0 ? `(${freeSeats} lliures)` : '(completa)'}
                         </span>
                       </button>
                     );
@@ -226,13 +226,17 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                       onChange={e => setSelectedTargetSeat(e.target.value ? Number(e.target.value) : undefined)}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium"
                     >
-                      <option value="">Primer seient lliure disponible (Recomanat)</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => {
+                      <option value="">Primer seient lliure disponible o nou extra (Recomanat)</option>
+                      {Array.from(
+                        { length: Math.max(10, ((tables.find(t => t.tableNumber === targetTable)?.guests.length || 0) + 1)) },
+                        (_, i) => i + 1
+                      ).map(s => {
                         const targetTableObj = tables.find(t => t.tableNumber === targetTable);
                         const occ = targetTableObj?.guests.find(g => g.seatNumber === s);
+                        const isExtra = s > 10;
                         return (
                           <option key={s} value={s}>
-                            Seient #{s} {occ ? `(Ocupat per ${formatFullNameSurnamesFirst(occ)})` : '(Lliure)'}
+                            Seient #{s} {occ ? `(Ocupat per ${formatFullNameSurnamesFirst(occ)})` : isExtra ? '(+ Nou seient extra)' : '(Lliure)'}
                           </option>
                         );
                       })}
@@ -492,7 +496,7 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                             isSelected ? 'text-slate-300' : freeSeats > 0 ? 'text-emerald-600 font-medium' : 'text-slate-500'
                           }`}
                         >
-                          {t.guests.length}/{t.capacity} ({freeSeats} lliures)
+                          {t.guests.length} comensals {freeSeats > 0 ? `(${freeSeats} lliures)` : '(completa)'}
                         </span>
                       </button>
                     );
@@ -530,13 +534,17 @@ export const TableAssignmentModal: React.FC<TableAssignmentModalProps> = ({
                       onChange={e => setSelectedTargetSeat(e.target.value ? Number(e.target.value) : undefined)}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium"
                     >
-                      <option value="">Primer seient lliure disponible (Recomanat)</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => {
+                      <option value="">Primer seient lliure disponible o nou extra (Recomanat)</option>
+                      {Array.from(
+                        { length: Math.max(10, ((tables.find(t => t.tableNumber === targetTable)?.guests.length || 0) + 1)) },
+                        (_, i) => i + 1
+                      ).map(s => {
                         const targetTableObj = tables.find(t => t.tableNumber === targetTable);
                         const occ = targetTableObj?.guests.find(g => g.seatNumber === s);
+                        const isExtra = s > 10;
                         return (
                           <option key={s} value={s}>
-                            Seient #{s} {occ ? `(Ocupat per ${formatFullNameSurnamesFirst(occ)})` : '(Lliure)'}
+                            Seient #{s} {occ ? `(Ocupat per ${formatFullNameSurnamesFirst(occ)})` : isExtra ? '(+ Nou seient extra)' : '(Lliure)'}
                           </option>
                         );
                       })}

@@ -43,6 +43,13 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const validateAssignments = (obj: any): TableAssignmentsMap | null => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return {};
+    if (keys.length > 5 && keys.slice(0, 10).every(k => /^\d+$/.test(k))) return null;
+    return obj as TableAssignmentsMap;
+  };
   // 1. Event & Guests Data State
   const [csvText, setCsvText] = useState<string>(() => {
     try {
@@ -88,7 +95,9 @@ export default function App() {
   const [tableAssignments, setTableAssignments] = useState<TableAssignmentsMap>(() => {
     try {
       const saved = localStorage.getItem('luma_table_assignments');
-      return saved ? JSON.parse(saved) : INITIAL_TABLE_ASSIGNMENTS;
+      const parsed = saved ? JSON.parse(saved) : null;
+      const valid = validateAssignments(parsed);
+      return valid || INITIAL_TABLE_ASSIGNMENTS;
     } catch {
       return INITIAL_TABLE_ASSIGNMENTS;
     }
@@ -237,8 +246,11 @@ export default function App() {
           localStorage.setItem('luma_table_names', JSON.stringify(s.tableNames));
         }
         if (s.tableAssignments) {
-          setTableAssignments(s.tableAssignments);
-          localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+          const valid = validateAssignments(s.tableAssignments);
+          if (valid) {
+            setTableAssignments(valid);
+            localStorage.setItem('luma_table_assignments', JSON.stringify(valid));
+          }
         }
         lastSavedFingerprintRef.current = computeFingerprint(
           (s.csvText && s.csvText.length > 50) ? s.csvText : csvText,
@@ -346,10 +358,13 @@ export default function App() {
           localStorage.setItem('luma_table_names', JSON.stringify(s.tableNames));
         }
         // Només carreguem assignacions si el servidor en té més o si l'usuari no en té de pendents
-        if (s.tableAssignments && (!hasExistingLocalAssignments || Object.keys(s.tableAssignments).length >= Object.keys(tableAssignments).length)) {
-          loadedAssignments = s.tableAssignments;
-          setTableAssignments(s.tableAssignments);
-          localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+        if (s.tableAssignments) {
+          const valid = validateAssignments(s.tableAssignments);
+          if (valid && (!hasExistingLocalAssignments || Object.keys(valid).length >= Object.keys(tableAssignments).length)) {
+            loadedAssignments = valid;
+            setTableAssignments(valid);
+            localStorage.setItem('luma_table_assignments', JSON.stringify(valid));
+          }
         }
 
         lastSavedFingerprintRef.current = computeFingerprint(
@@ -574,9 +589,12 @@ export default function App() {
               localStorage.setItem('luma_table_names', JSON.stringify(s.tableNames));
             }
             if (s.tableAssignments) {
-              updatedAssignments = s.tableAssignments;
-              setTableAssignments(s.tableAssignments);
-              localStorage.setItem('luma_table_assignments', JSON.stringify(s.tableAssignments));
+              const valid = validateAssignments(s.tableAssignments);
+              if (valid) {
+                updatedAssignments = valid;
+                setTableAssignments(valid);
+                localStorage.setItem('luma_table_assignments', JSON.stringify(valid));
+              }
             }
 
             // Actualitzem l'empremta perquè l'auto-save no re-enviï el que acabem de rebre del servidor

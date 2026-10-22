@@ -357,17 +357,22 @@ export function processGuests(
 
   // Populate tables 1 to maxTableNum (ensuring contiguous tables without missing cards)
   for (let t = 1; t <= maxTableNum; t++) {
-    const seats: (ProcessedGuest | null)[] = new Array(tableSize).fill(null);
     const candidates = tableCandidatesMap.get(t) || [];
+    const maxSeatNumber = Math.max(
+      tableSize,
+      ...candidates.map(c => c.preferredSeat || 0),
+      candidates.length
+    );
+    const seats: (ProcessedGuest | null)[] = new Array(maxSeatNumber).fill(null);
     const unplaced: TableCandidate[] = [];
 
-    // Pass 1: Place explicit assignments with preferred seat within 1..tableSize
+    // Pass 1: Place explicit assignments with preferred seat within 1..maxSeatNumber
     candidates.forEach(c => {
       if (
         c.isExplicit &&
         c.preferredSeat &&
         c.preferredSeat >= 1 &&
-        c.preferredSeat <= tableSize &&
+        c.preferredSeat <= maxSeatNumber &&
         seats[c.preferredSeat - 1] === null
       ) {
         seats[c.preferredSeat - 1] = c.guest;
@@ -376,14 +381,14 @@ export function processGuests(
       }
     });
 
-    // Pass 2: Place baseline (non-explicit) assignments with preferred seat within 1..tableSize
+    // Pass 2: Place baseline (non-explicit) assignments with preferred seat within 1..maxSeatNumber
     const stillUnplaced: TableCandidate[] = [];
     unplaced.forEach(c => {
       if (
         !c.isExplicit &&
         c.preferredSeat &&
         c.preferredSeat >= 1 &&
-        c.preferredSeat <= tableSize &&
+        c.preferredSeat <= maxSeatNumber &&
         seats[c.preferredSeat - 1] === null
       ) {
         seats[c.preferredSeat - 1] = c.guest;
@@ -402,6 +407,11 @@ export function processGuests(
         seats.push(c.guest);
       }
     });
+
+    // Trim trailing null seats beyond tableSize if any
+    while (seats.length > tableSize && seats[seats.length - 1] === null) {
+      seats.pop();
+    }
 
     // Assign final tableNumber and seatNumber to each seated guest
     seats.forEach((g, seatIdx) => {
